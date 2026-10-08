@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* SISPORT CDSS Corporate Light (from DESIGN.md) */
+  --color-cco-darkest: #f8fafc;
+  --color-cco-bg: #f1f5f9;
+  --color-cco-panel: #ffffff;
+  --color-cco-card: #ffffff;
+  --color-cco-border: #e2e8f0;
+  --color-cco-subtle: #cbd5e1;
+  --color-cco-hover: #f1f5f9;
+  --color-cco-accent: #0051d5;
+
+  --color-maritime-orange: #d97706;
+  --color-maritime-red: #dc2626;
+  --color-maritime-gray: #64748b;
+  --color-maritime-green: #059669;
+  --color-maritime-blue: #2563eb;
+}
+
+.dark {
+  /* SISPORT CDSS CCO Night Operations (Dark) */
+  --color-cco-darkest: #090d16;
+  --color-cco-bg: #0c1220;
+  --color-cco-panel: #131b2e;
+  --color-cco-card: #18223a;
+  --color-cco-border: #223254;
+  --color-cco-subtle: #2c3e66;
+  --color-cco-hover: #1e2b48;
+  --color-cco-accent: #06b6d4;
+
+  --color-maritime-orange: #f97316;
+  --color-maritime-red: #ef4444;
+  --color-maritime-gray: #94a3b8;
+  --color-maritime-green: #10b981;
+  --color-maritime-blue: #3b82f6;
+}
+
+@theme {
+  --color-cco-darkest: var(--color-cco-darkest);
+  --color-cco-bg: var(--color-cco-bg);
+  --color-cco-panel: var(--color-cco-panel);
+  --color-cco-card: var(--color-cco-card);
+  --color-cco-border: var(--color-cco-border);
+  --color-cco-subtle: var(--color-cco-subtle);
+  --color-cco-hover: var(--color-cco-hover);
+  --color-cco-accent: var(--color-cco-accent);
+
+  --color-maritime-orange: var(--color-maritime-orange);
+  --color-maritime-red: var(--maritime-red);
+  --color-maritime-gray: var(--maritime-gray);
+  --color-maritime-green: var(--maritime-green);
+  --color-maritime-blue: var(--maritime-blue);
+}
+
+body {
+  background-color: var(--color-cco-darkest);
+  color: #0f172a;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.dark body,
+html.dark body {
+  background-color: #090d16;
+  color: #e2e8f0;
+}
+
+/* Custom Scrollbar for CCO Monitor */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0c1220;
+}
+::-webkit-scrollbar-thumb {
+  background: #223254;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #06b6d4;
+}
+
+/* Leaflet Dark Customizations */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #090d16 !important;
+}
+.leaflet-popup-content-wrapper {
+  background: #131b2e !important;
+  color: #e2e8f0 !important;
+  border: 1px solid #223254 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+}
+.leaflet-popup-tip {
+  background: #131b2e !important;
+}
+.leaflet-popup-close-button {
+  color: #94a3b8 !important;
+  padding: 6px 8px !important;
+}
+.leaflet-popup-close-button:hover {
+  color: #38bdf8 !important;
+}
+.leaflet-popup-content {
+  margin: 10px 12px !important;
+  line-height: 1.4 !important;
+}
+
+.custom-map-tooltip {
+  background: rgba(19, 27, 46, 0.95) !important;
+  color: #f1f5f9 !important;
+  border: 1px solid #223254 !important;
+  border-radius: 6px !important;
+  padding: 4px 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+  font-family: inherit !important;
+}
+.custom-map-tooltip:before {
+  border-top-color: rgba(19, 27, 46, 0.95) !important;
+}
+
+/* Tide Sparkline Marker Enhancements */
+.tide-marker,
+.tide-point {
+  cursor: pointer;
+}
+.tide-marker circle,
+.tide-point circle {
+  transition: r 0.18s cubic-bezier(0.4, 0, 0.2, 1), stroke-width 0.18s ease;
+}
+.tide-marker:hover circle,
+.tide-point:hover circle {
+  r: 4.8px;
+  stroke: #ffffff;
+  stroke-width: 1.5px;
+  filter: drop-shadow(0 0 5px currentColor);
+}
+.tide-point text {
+  paint-order: stroke fill;
+  stroke: #070d18;
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
+}
+
