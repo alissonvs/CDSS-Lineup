@@ -1,6 +1,6 @@
 /**
  * Utilitário de Renderização da Mini-Curva Contínua de Maré (SVG Sparkline Sinusoidal)
- * SISPORT CDSS v2.0 - Porto de São Sebastião
+ * SISPORT CDSS - Porto de São Sebastião
  * 
  * Interpolação de Maré via Cosseno a cada 20 minutos a partir dos extremos astronômicos da DHN (Estação 40165)
  * Fórmula clássica de maré:

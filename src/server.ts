@@ -6,6 +6,7 @@ import fs from 'fs';
 import { initializeDatabase } from './database/init.js';
 import apiRoutes from './routes/api.js';
 import { spPilotsService } from './services/spPilotsService.js';
+import { APP_VERSION } from './version.js';
 
 dotenv.config();
 
@@ -52,7 +53,7 @@ if (fs.existsSync(clientDistPath)) {
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`====================================================`);
-  console.log(`⚓ SISPORT CDSS - LINE-UP INTELIGENTE EM EXECUÇÃO`);
+  console.log(`⚓ SISPORT CDSS - LINE-UP INTELIGENTE v${APP_VERSION} EM EXECUÇÃO`);
   console.log(`📡 Servidor rodando em: http://${HOST}:${PORT}`);
   console.log(`📊 API REST disponível em: http://${HOST}:${PORT}/api/lineup`);
   console.log(`🏥 Healthcheck probe: http://${HOST}:${PORT}/api/health`);

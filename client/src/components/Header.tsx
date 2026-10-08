@@ -120,9 +120,17 @@ export const Header: React.FC<HeaderProps> = ({
           <Anchor className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="font-extrabold text-base tracking-wider text-slate-900 dark:text-white leading-tight">
-            PCS Lineup
-          </h1>
+          <div className="flex items-center space-x-1.5">
+            <h1 className="font-extrabold text-base tracking-wider text-slate-900 dark:text-white leading-tight">
+              PCS Lineup
+            </h1>
+            <span
+              title={`Versão Oficial do Sistema: v${__APP_VERSION__}`}
+              className="text-[10px] bg-blue-50 dark:bg-cyan-950/80 text-blue-700 dark:text-cyan-400 border border-blue-200 dark:border-cyan-800/80 px-1.5 py-0.5 rounded font-mono font-bold leading-none select-none cursor-default"
+            >
+              v{__APP_VERSION__}
+            </span>
+          </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
             Porto de São Sebastião
           </p>

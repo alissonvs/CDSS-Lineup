@@ -14,6 +14,7 @@ import {
   UKC_MINIMO_REGULAMENTAR,
   CALADO_CRITICO_LIMIAR
 } from '../services/tideService.js';
+import { APP_VERSION } from '../version.js';
 
 export async function getHealthHandler(_req: Request, res: Response): Promise<void> {
   try {
@@ -21,6 +22,7 @@ export async function getHealthHandler(_req: Request, res: Response): Promise<vo
     await sql`SELECT 1`;
     res.json({
       status: 'healthy',
+      version: APP_VERSION,
       database: 'connected',
       uptime: Math.round(process.uptime()),
       timestamp: new Date().toISOString()

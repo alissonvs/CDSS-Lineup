@@ -16,12 +16,14 @@ import {
   getCurrentTideHandler,
   getRainForecastHandler
 } from '../controllers/lineupController.js';
+import { APP_VERSION } from '../version.js';
 
 const router = Router();
 
 // Healthcheck & Diagnóstico (Dokploy / Docker probes)
 router.get('/health', getHealthHandler);
 router.get('/livez', (_req, res) => { res.status(200).send('OK'); });
+router.get('/version', (_req, res) => { res.json({ name: 'cdss-line-up-v2', version: APP_VERSION }); });
 
 // Lineup e Navios
 router.get('/lineup', getLineupHandler);
