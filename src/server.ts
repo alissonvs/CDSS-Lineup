@@ -43,7 +43,7 @@ if (fs.existsSync(clientDistPath)) {
   app.get('/', (_req, res) => {
     res.send(`
       <div style="font-family: system-ui; padding: 40px; background: #0f172a; color: #e2e8f0; min-height: 100vh;">
-        <h1 style="color: #38bdf8;">SISPORT Line-Up Inteligente - Porto de São Sebastião (CDSS)</h1>
+        <h1 style="color: #38bdf8;">PCS Lineup - Porto de São Sebastião</h1>
         <p>Backend operacional ativo na porta <strong>${PORT}</strong>.</p>
         <p>Acesse as rotas da API em <a href="/api/lineup" style="color: #34d399;">/api/lineup</a> ou inicie o cliente de desenvolvimento com <code>npm run dev</code>.</p>
       </div>
@@ -53,7 +53,7 @@ if (fs.existsSync(clientDistPath)) {
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`====================================================`);
-  console.log(`⚓ SISPORT CDSS - LINE-UP INTELIGENTE v${APP_VERSION} EM EXECUÇÃO`);
+  console.log(`⚓ PCS LINEUP v${APP_VERSION} EM EXECUÇÃO`);
   console.log(`📡 Servidor rodando em: http://${HOST}:${PORT}`);
   console.log(`📊 API REST disponível em: http://${HOST}:${PORT}/api/lineup`);
   console.log(`🏥 Healthcheck probe: http://${HOST}:${PORT}/api/health`);

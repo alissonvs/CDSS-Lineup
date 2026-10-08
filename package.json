@@ -1,7 +1,7 @@
 {
   "name": "cdss-line-up-v2",
   "version": "2.0.0",
-  "description": "SISPORT Line-Up Inteligente - Porto de São Sebastião (CDSS)",
+  "description": "PCS Lineup - Porto de São Sebastião",
   "main": "src/server.ts",
   "type": "module",
   "scripts": {

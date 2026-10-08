@@ -548,7 +548,7 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
             <span>Canal de São Sebastião &bull; CCO</span>
           </h3>
           <span className="text-[10px] bg-blue-50 dark:bg-cyan-950 text-blue-700 dark:text-cyan-400 border border-blue-200 dark:border-cyan-800 px-1.5 py-0.5 rounded font-mono font-bold">
-            CDSS v{__APP_VERSION__}
+            PCS Lineup v{__APP_VERSION__}
           </span>
         </div>
 

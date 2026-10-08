@@ -62,7 +62,7 @@ export const App: React.FC = () => {
       if (tideData) setTelemetriaMare(tideData);
     } catch (err) {
       console.error('Erro ao carregar lineup:', err);
-      setErrorBanner('Falha ao conectar com o backend SISPORT. Verifique se o servidor Express está ativo.');
+      setErrorBanner('Falha ao conectar com o backend PCS Lineup. Verifique se o servidor Express está ativo.');
     } finally {
       setIsLoading(false);
     }

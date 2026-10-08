@@ -262,7 +262,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             type="button"
             onClick={() => setTheme('light')}
-            title="Ativar Modo Claro (SISPORT CDSS Corporate Light)"
+            title="Ativar Modo Claro (PCS Lineup Corporate Light)"
             className={`flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
               theme === 'light'
                 ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-300/80 border border-slate-200'

@@ -1,5 +1,5 @@
 ---
-name: SISPORT CDSS Corporate Light
+name: PCS Lineup Corporate Light
 colors:
   surface: '#f8f9ff'
   surface-dim: '#cbdbf5'

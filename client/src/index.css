@@ -2,7 +2,7 @@
 @variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* SISPORT CDSS Corporate Light (from DESIGN.md) */
+  /* PCS Lineup Corporate Light (from DESIGN.md) */
   --color-cco-darkest: #f8fafc;
   --color-cco-bg: #f1f5f9;
   --color-cco-panel: #ffffff;
@@ -20,7 +20,7 @@
 }
 
 .dark {
-  /* SISPORT CDSS CCO Night Operations (Dark) */
+  /* PCS Lineup CCO Night Operations (Dark) */
   --color-cco-darkest: #090d16;
   --color-cco-bg: #0c1220;
   --color-cco-panel: #131b2e;

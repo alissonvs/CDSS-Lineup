@@ -1,4 +1,4 @@
-# PCS Lineup &bull; Porto de São Sebastião (CDSS v2.0)
+# PCS Lineup &bull; Porto de São Sebastião (v2.0.0)
 
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-22_LTS-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" />
@@ -340,5 +340,5 @@ docker compose down
 
 ## 11. Licença & Uso
 
-Propriedade do projeto **PCS Lineup &bull; CDSS v2.0**.  
+Propriedade do projeto **PCS Lineup &bull; v2.0.0**.  
 Desenvolvido para apoio à tomada de decisão operacional, supervisão portuária e segurança da navegação no **Porto de São Sebastião (CDSS)**.
