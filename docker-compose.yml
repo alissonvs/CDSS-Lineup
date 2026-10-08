@@ -38,6 +38,11 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-cdsslineup}:${POSTGRES_PASSWORD:-cdsslineup_secret}@postgres:5432/${POSTGRES_DB:-cdsslineup}}
+      - POSTGRES_USER=${POSTGRES_USER:-}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+      - POSTGRES_DB=${POSTGRES_DB:-}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
       - DATADOCKED_API_KEY=${DATADOCKED_API_KEY}
       - VITE_CARTO_API_KEY=${VITE_CARTO_API_KEY}
     healthcheck:
