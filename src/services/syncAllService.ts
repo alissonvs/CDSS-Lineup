@@ -81,11 +81,15 @@ export async function sincronizarTudoCdss(): Promise<SyncAllResult> {
 
         if (telemetria) {
           const etaAis = telemetria.eta_previsto || null;
+          const inicioOpExistente = navio.inicio_operacao && String(navio.inicio_operacao).trim();
+          const novoInicioOp = inicioOpExistente ? String(navio.inicio_operacao).trim() : (etaAis || null);
+
           await sql`
             UPDATE lineup_navios SET
               latitude = ${telemetria.latitude},
               longitude = ${telemetria.longitude},
               eta_ais = ${etaAis},
+              inicio_operacao = ${novoInicioOp},
               sinal_antena = ${telemetria.positionReceived || null},
               loa = CASE WHEN loa IS NULL OR loa <= 0 THEN ${telemetria.loa || navio.loa} ELSE loa END,
               dwt = CASE WHEN dwt IS NULL OR dwt <= 0 THEN ${telemetria.dwt || navio.dwt} ELSE dwt END,

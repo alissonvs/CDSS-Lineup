@@ -173,11 +173,17 @@ export async function recalcularLineupComMotor(): Promise<{
     const navio: NavioLineup = { ...navioVerde };
     totalVolumeT += navio.volume_t || 0;
 
-    // Tempo já operado no passado (horasJaOperadasMs):
-    // Garante um bloco verde expressivo cobrindo a operação real decorrida no cais (12h no passado)
+    // Tempo de início da operação no cais comercial:
+    // Prioridade máxima: inicio_operacao (editado manualmente ou preenchido automaticamente via AIS)
     const horasJaOperadasMs = 12 * 3600 * 1000;
     let berthedAtMs = nowMs - horasJaOperadasMs;
-    if (navio.inicio_atracacao) {
+
+    if (navio.inicio_operacao) {
+      const parsedInicioOp = parseDateIso(navio.inicio_operacao);
+      if (parsedInicioOp) {
+        berthedAtMs = parsedInicioOp.getTime();
+      }
+    } else if (navio.inicio_atracacao) {
       const parsedInicio = parseDateIso(navio.inicio_atracacao);
       if (parsedInicio && parsedInicio.getTime() <= nowMs - 4 * 3600 * 1000) {
         berthedAtMs = parsedInicio.getTime();
@@ -196,7 +202,7 @@ export async function recalcularLineupComMotor(): Promise<{
     const blocos: TimelineBlock[] = [];
     const caladoCriticoVerde = (navio.calado || 0) > 9.50;
 
-    // A. Histórico de Fundeio Real (se ancorou na barra antes de atracar)
+    // A. Bloco Vermelho (Fundeio prévio se houver registro de chegada no fundeio)
     if (navio.chegada_fundeio) {
       const anchoredAt = parseDateIso(navio.chegada_fundeio);
       if (anchoredAt && anchoredAt.getTime() < berthedAtMs) {
@@ -257,8 +263,8 @@ export async function recalcularLineupComMotor(): Promise<{
     const navio: NavioLineup = { ...n };
     totalVolumeT += navio.volume_t || 0;
 
-    // Data de prontidão do navio (ETA ou Chegada no Fundeio)
-    const etaD = parseDateIso(navio.chegada_fundeio || navio.eta_previsto) || agora;
+    // Data de prontidão do navio (Início da Operação > Chegada no Fundeio > ETA)
+    const etaD = parseDateIso(navio.inicio_operacao || navio.chegada_fundeio || navio.eta_previsto) || agora;
     const etaMs = etaD.getTime();
 
     // Regra matemática do encadeamento estrito de berço único:

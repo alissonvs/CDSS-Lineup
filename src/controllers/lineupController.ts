@@ -103,17 +103,22 @@ export async function createNavioHandler(req: Request, res: Response): Promise<v
       }
     }
 
+    const inicioOperacao = (body.inicio_operacao && body.inicio_operacao.trim())
+      ? body.inicio_operacao.trim()
+      : (body.eta_ais ? body.eta_ais.trim() : null);
+
     const [inserted] = await sql`
       INSERT INTO lineup_navios (
         imo, nome_navio, tipo_navio, mercadoria, volume_t, loa, dwt, calado, agencia,
-        ordem_fila, status_cor, livre_pratica_ok, armazem_publico, eta_previsto, eta_ais,
+        ordem_fila, status_cor, livre_pratica_ok, armazem_publico, eta_previsto, eta_ais, inicio_operacao,
         chegada_fundeio, inicio_atracacao, fim_atracacao, latitude, longitude, progresso_operacao
       ) VALUES (
         ${imo}, ${nomeNavio}, ${tipoNavio || 'Graneleiro Handymax'}, ${body.mercadoria.trim()},
         ${Number(body.volume_t)}, ${loa || 170.0}, ${dwt || 25000}, ${calado || 8.5},
         ${body.agencia?.trim() || 'Agência Local'}, ${Number(ordem)}, ${statusCor},
         ${body.livre_pratica_ok ? 1 : 0}, ${body.armazem_publico ? 1 : 0},
-        ${body.eta_previsto || null}, ${body.eta_ais || null}, ${body.chegada_fundeio || null},
+        ${body.eta_previsto || null}, ${body.eta_ais || null}, ${inicioOperacao},
+        ${body.chegada_fundeio || null},
         ${body.inicio_atracacao || null}, ${body.fim_atracacao || null},
         ${Number(body.latitude || -23.8045)}, ${Number(body.longitude || -45.3970)},
         ${body.progresso_operacao !== undefined && body.progresso_operacao !== null ? Number(body.progresso_operacao) : null}
@@ -193,6 +198,18 @@ export async function updateNavioHandler(req: Request, res: Response): Promise<v
       }
     }
 
+    let inicioOperacao = existing.inicio_operacao;
+    if (body.inicio_operacao !== undefined) {
+      inicioOperacao = (body.inicio_operacao && body.inicio_operacao.trim()) ? body.inicio_operacao.trim() : null;
+    }
+    // Regra: se o campo estiver vazio, preenche com as informações de data e hora do AIS (eta_ais)
+    if (!inicioOperacao) {
+      const etaAisCandidate = body.eta_ais !== undefined ? body.eta_ais : existing.eta_ais;
+      if (etaAisCandidate && etaAisCandidate.trim()) {
+        inicioOperacao = etaAisCandidate.trim();
+      }
+    }
+
     await sql`
       UPDATE lineup_navios SET
         imo = ${imo},
@@ -209,6 +226,7 @@ export async function updateNavioHandler(req: Request, res: Response): Promise<v
         armazem_publico = ${body.armazem_publico !== undefined ? (body.armazem_publico ? 1 : 0) : existing.armazem_publico},
         eta_previsto = ${(body.eta_previsto !== undefined ? body.eta_previsto : existing.eta_previsto) ?? null},
         eta_ais = ${(body.eta_ais !== undefined ? body.eta_ais : (existing.eta_ais || null)) ?? null},
+        inicio_operacao = ${inicioOperacao ?? null},
         chegada_fundeio = ${(body.chegada_fundeio !== undefined ? body.chegada_fundeio : existing.chegada_fundeio) ?? null},
         inicio_atracacao = ${(body.inicio_atracacao !== undefined ? body.inicio_atracacao : existing.inicio_atracacao) ?? null},
         fim_atracacao = ${(body.fim_atracacao !== undefined ? body.fim_atracacao : existing.fim_atracacao) ?? null},
@@ -304,48 +322,40 @@ export async function syncDataDockedHandler(req: Request, res: Response): Promis
 
     // 1. Identifica se a embarcação já existe no banco (por navioId se fornecido, ou por IMO)
     const navioId = req.query.navioId ? Number(req.query.navioId) : undefined;
-    let existing: {
-      id: number;
-      imo: string;
-      nome_navio: string;
-      loa: number;
-      dwt: number;
-      calado: number;
-    } | undefined = undefined;
+    let existing: NavioLineup | undefined = undefined;
 
     if (navioId && !isNaN(navioId)) {
-      const rows = await sql`SELECT id, imo, nome_navio, loa, dwt, calado FROM lineup_navios WHERE id = ${navioId}`;
-      if (rows.length > 0) existing = rows[0] as any;
+      const rows = await sql<NavioLineup[]>`SELECT * FROM lineup_navios WHERE id = ${navioId}`;
+      if (rows.length > 0) existing = rows[0];
     }
     if (!existing) {
-      const rows = await sql`SELECT id, imo, nome_navio, loa, dwt, calado FROM lineup_navios WHERE imo = ${vesselData.imo}`;
-      if (rows.length > 0) existing = rows[0] as any;
+      const rows = await sql<NavioLineup[]>`SELECT * FROM lineup_navios WHERE imo = ${vesselData.imo}`;
+      if (rows.length > 0) existing = rows[0];
     }
 
     const etaAis = vesselData.eta_previsto || null;
 
     if (existing) {
       // REGRA DE OURO CDSS: O SISPORT é a autoridade máxima da escala comercial.
-      // A telemetria AIS DataDocked atualiza ESTRITAMENTE:
-      // - Coordenadas em tempo real (latitude, longitude)
-      // - Previsão transmitida pelo comandante no transponder (eta_ais)
-      // - Registro do sinal da antena (sinal_antena)
-      // - Timestamp da consulta DataDocked (ais_sincronizado_em)
-      // Dimensões (loa, dwt, calado) são apenas complementadas caso estejam zeradas/nulas.
-      // NUNCA altera: nome_navio, tipo_navio, mercadoria, volume, agencia, ordem_fila, status_cor, chegada_fundeio, inicio_atracacao
+      // Regra de Início da Operação: se o campo estiver vazio, preenche com as informações do AIS (eta_ais). Caso já tenha informações, NÃO sobrescreve.
+      const inicioOpExistente = existing.inicio_operacao && String(existing.inicio_operacao).trim();
+      const novoInicioOp = inicioOpExistente ? String(existing.inicio_operacao).trim() : (etaAis || null);
+      const novoImo = (vesselData.imo && vesselData.imo.trim()) ? vesselData.imo.trim() : existing.imo;
+
       await sql`
         UPDATE lineup_navios SET
-          imo = CASE WHEN ${vesselData.imo || null} IS NOT NULL AND ${vesselData.imo || null} != '' THEN ${vesselData.imo} ELSE imo END,
+          imo = ${novoImo},
           latitude = ${vesselData.latitude},
           longitude = ${vesselData.longitude},
           eta_ais = ${etaAis},
+          inicio_operacao = ${novoInicioOp},
           sinal_antena = ${vesselData.positionReceived || null},
           loa = CASE WHEN loa IS NULL OR loa <= 0 THEN ${vesselData.loa || 170.0} ELSE loa END,
           dwt = CASE WHEN dwt IS NULL OR dwt <= 0 THEN ${vesselData.dwt || 25000} ELSE dwt END,
           calado = CASE WHEN calado IS NULL OR calado <= 0 THEN ${vesselData.calado || 8.5} ELSE calado END,
           ais_sincronizado_em = CURRENT_TIMESTAMP,
           ultima_atualizacao = CURRENT_TIMESTAMP
-        WHERE id = ${existing.id}
+        WHERE id = ${existing.id!}
       `;
     } else {
       const [maxRow] = await sql`SELECT COALESCE(MAX(ordem_fila), 0)::int as max_ordem FROM lineup_navios`;
@@ -354,14 +364,14 @@ export async function syncDataDockedHandler(req: Request, res: Response): Promis
       await sql`
         INSERT INTO lineup_navios (
           imo, nome_navio, tipo_navio, mercadoria, volume_t, loa, dwt, calado, agencia,
-          ordem_fila, status_cor, livre_pratica_ok, armazem_publico, eta_previsto, eta_ais,
+          ordem_fila, status_cor, livre_pratica_ok, armazem_publico, eta_previsto, eta_ais, inicio_operacao,
           latitude, longitude, sinal_antena, ais_sincronizado_em, ultima_atualizacao
         ) VALUES (
           ${vesselData.imo}, ${vesselData.nome_navio}, ${vesselData.tipo_navio || 'Graneleiro'},
           ${vesselData.mercadoria || 'Carga Geral'}, ${vesselData.volume_t || 15000},
           ${vesselData.loa || 170.0}, ${vesselData.dwt || 25000}, ${vesselData.calado || 8.5},
           ${vesselData.agencia || 'Agência Cadastrada'}, ${maxOrdem + 1}, 'LARANJA', 0,
-          'Armazém 01', ${vesselData.eta_previsto || new Date().toISOString()}, ${etaAis},
+          'Armazém 01', ${vesselData.eta_previsto || new Date().toISOString()}, ${etaAis}, ${etaAis},
           ${vesselData.latitude}, ${vesselData.longitude}, ${vesselData.positionReceived || null},
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )

@@ -27,6 +27,7 @@ export async function initializeDatabase(): Promise<void> {
         -- Marcos Temporais (ISO 8601 em formato de texto)
         eta_previsto TEXT,                                -- Previsão Oficial de Chegada (SISPORT / Porto)
         eta_ais TEXT,                                     -- Previsão informada pelo Transponder AIS (DataDocked)
+        inicio_operacao TEXT,                             -- Início da Operação (Previsão / Real)
         chegada_fundeio TEXT,                             -- Entrada física na barra
         inicio_atracacao TEXT,                            -- Início do berço (Real para Verde / Projetado para Azul)
         fim_atracacao TEXT,                               -- Término do berço (Real para Verde / Projetado para Azul)
@@ -104,9 +105,18 @@ export async function initializeDatabase(): Promise<void> {
   // Migração defensiva: garante a existência das colunas opcionais no PostgreSQL
   try {
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS eta_ais TEXT`;
+    await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS inicio_operacao TEXT`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS sinal_antena TEXT`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS ais_sincronizado_em TEXT`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS progresso_operacao DOUBLE PRECISION`;
+
+    // Regra: se inicio_operacao estiver vazio, preenche inicialmente com as informações de data e hora do AIS (eta_ais)
+    await sql`
+      UPDATE lineup_navios
+      SET inicio_operacao = eta_ais
+      WHERE (inicio_operacao IS NULL OR TRIM(inicio_operacao) = '')
+        AND eta_ais IS NOT NULL AND TRIM(eta_ais) != ''
+    `;
   } catch (err) {
     console.error("[Database] Erro ao verificar/adicionar colunas defensivas em lineup_navios:", err);
   }

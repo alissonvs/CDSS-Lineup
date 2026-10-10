@@ -39,6 +39,8 @@ export const NavioModal: React.FC<NavioModalProps> = ({
     livre_pratica_ok: 0,
     armazem_publico: 0,
     eta_previsto: '',
+    eta_ais: '',
+    inicio_operacao: '',
     chegada_fundeio: '',
     latitude: -23.8045,
     longitude: -45.3970
@@ -53,7 +55,18 @@ export const NavioModal: React.FC<NavioModalProps> = ({
 
   useEffect(() => {
     if (navioParaEditar) {
-      setFormData({ ...navioParaEditar });
+      // Regra: se o campo inicio_operacao estiver vazio, preenche com as informações de data e hora do AIS (eta_ais)
+      const inicioOp = navioParaEditar.inicio_operacao
+        ? navioParaEditar.inicio_operacao.slice(0, 16)
+        : (navioParaEditar.eta_ais ? navioParaEditar.eta_ais.slice(0, 16) : '');
+
+      setFormData({
+        ...navioParaEditar,
+        inicio_operacao: inicioOp,
+        eta_previsto: navioParaEditar.eta_previsto ? navioParaEditar.eta_previsto.slice(0, 16) : '',
+        chegada_fundeio: navioParaEditar.chegada_fundeio ? navioParaEditar.chegada_fundeio.slice(0, 16) : '',
+        eta_ais: navioParaEditar.eta_ais ? navioParaEditar.eta_ais.slice(0, 16) : ''
+      });
     } else {
       setFormData({
         imo: '',
@@ -69,6 +82,9 @@ export const NavioModal: React.FC<NavioModalProps> = ({
         livre_pratica_ok: 0,
         armazem_publico: 0,
         eta_previsto: '2026-09-20T14:00',
+        eta_ais: '',
+        inicio_operacao: '',
+        chegada_fundeio: '',
         latitude: -23.8045,
         longitude: -45.3970
       });
@@ -123,20 +139,29 @@ export const NavioModal: React.FC<NavioModalProps> = ({
 
     try {
       const { vessel } = await syncDataDocked(formData.imo.trim(), navioParaEditar?.id);
-      setFormData((prev) => ({
-        ...prev,
-        nome_navio: prev.nome_navio || vessel.nome_navio,
-        tipo_navio: prev.tipo_navio || vessel.tipo_navio,
-        mercadoria: prev.mercadoria || vessel.mercadoria,
-        volume_t: prev.volume_t || vessel.volume_t,
-        agencia: prev.agencia || vessel.agencia,
-        loa: prev.loa || vessel.loa,
-        dwt: prev.dwt || vessel.dwt,
-        calado: prev.calado || (vessel.calado ? Number(vessel.calado.toFixed(1)) : undefined),
-        eta_ais: vessel.eta_previsto ? vessel.eta_previsto.slice(0, 16) : prev.eta_ais,
-        latitude: vessel.latitude,
-        longitude: vessel.longitude
-      }));
+      setFormData((prev) => {
+        const novoEtaAis = vessel.eta_previsto ? vessel.eta_previsto.slice(0, 16) : prev.eta_ais;
+        // Regra: se inicio_operacao estiver vazio, preenche com informações do AIS; caso já tenha informações, preserva!
+        const novoInicioOp = (prev.inicio_operacao && prev.inicio_operacao.trim())
+          ? prev.inicio_operacao
+          : (novoEtaAis || '');
+
+        return {
+          ...prev,
+          nome_navio: prev.nome_navio || vessel.nome_navio,
+          tipo_navio: prev.tipo_navio || vessel.tipo_navio,
+          mercadoria: prev.mercadoria || vessel.mercadoria,
+          volume_t: prev.volume_t || vessel.volume_t,
+          agencia: prev.agencia || vessel.agencia,
+          loa: prev.loa || vessel.loa,
+          dwt: prev.dwt || vessel.dwt,
+          calado: prev.calado || (vessel.calado ? Number(vessel.calado.toFixed(1)) : undefined),
+          eta_ais: novoEtaAis,
+          inicio_operacao: novoInicioOp,
+          latitude: vessel.latitude,
+          longitude: vessel.longitude
+        };
+      });
       const latStr = vessel.latitude !== undefined ? vessel.latitude.toFixed(4) : '';
       const lonStr = vessel.longitude !== undefined ? vessel.longitude.toFixed(4) : '';
       const navStatusStr = vessel.navigationalStatus ? ` • ${vessel.navigationalStatus}` : '';
@@ -408,47 +433,70 @@ export const NavioModal: React.FC<NavioModalProps> = ({
             </div>
           </div>
 
-          {/* Marcos Temporais */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-slate-200 dark:border-cco-border pt-3">
-            <div>
-              {(() => {
-                const divergenciaModal = verificarDivergenciaEta(formData.eta_previsto, formData.eta_ais);
-                return (
-                  <>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-slate-600 dark:text-slate-400 font-semibold text-xs">
-                        Previsão Oficial (SISPORT / Porto)
-                      </label>
-                      {divergenciaModal?.temDivergencia && (
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${divergenciaModal.corBadge}`}>
-                          ⚠️ {divergenciaModal.textoResumo}
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="datetime-local"
-                      value={formData.eta_previsto || ''}
-                      onChange={(e) => setFormData({ ...formData, eta_previsto: e.target.value })}
-                      className="w-full bg-white dark:bg-cco-darkest border border-slate-300 dark:border-cco-border rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-200 font-mono focus:outline-none focus:border-blue-500"
-                    />
-                    {formData.eta_ais && (
-                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono flex items-center justify-between">
-                        <span>Previsão AIS (DataDocked): <strong className="text-amber-600 dark:text-amber-300">{formatarDataBr(formData.eta_ais)}</strong></span>
+          {/* Marcos Temporais & Início da Operação */}
+          <div className="border-t border-slate-200 dark:border-cco-border pt-3 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                {(() => {
+                  const divergenciaModal = verificarDivergenciaEta(formData.eta_previsto, formData.eta_ais);
+                  return (
+                    <>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-slate-600 dark:text-slate-400 font-semibold text-xs">
+                          Previsão Oficial (SISPORT / Porto)
+                        </label>
+                        {divergenciaModal?.temDivergencia && (
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${divergenciaModal.corBadge}`}>
+                            ⚠️ {divergenciaModal.textoResumo}
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </>
-                );
-              })()}
+                      <input
+                        type="datetime-local"
+                        value={formData.eta_previsto || ''}
+                        onChange={(e) => setFormData({ ...formData, eta_previsto: e.target.value })}
+                        className="w-full bg-white dark:bg-cco-darkest border border-slate-300 dark:border-cco-border rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-200 font-mono focus:outline-none focus:border-blue-500"
+                      />
+                      {formData.eta_ais && (
+                        <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono flex items-center justify-between">
+                          <span>Previsão AIS (DataDocked): <strong className="text-amber-600 dark:text-amber-300">{formatarDataBr(formData.eta_ais)}</strong></span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">Chegada ao Fundeio (Real)</label>
+                <input
+                  type="datetime-local"
+                  value={formData.chegada_fundeio || ''}
+                  onChange={(e) => setFormData({ ...formData, chegada_fundeio: e.target.value })}
+                  className="w-full bg-white dark:bg-cco-darkest border border-slate-300 dark:border-cco-border rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-200 font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">Chegada ao Fundeio (Real)</label>
+            {/* Novo Campo: Início da Operação */}
+            <div className="bg-slate-50 dark:bg-cco-darkest p-3 rounded-xl border border-blue-200 dark:border-blue-500/40 space-y-1.5 transition-colors">
+              <div className="flex items-center justify-between">
+                <label className="block text-slate-800 dark:text-slate-200 font-bold text-xs">
+                  Início da Operação (Previsão / Real)
+                </label>
+                <span className="text-[10px] text-blue-600 dark:text-cyan-400 font-semibold">
+                  Âncora do Início no Berço
+                </span>
+              </div>
               <input
                 type="datetime-local"
-                value={formData.chegada_fundeio || ''}
-                onChange={(e) => setFormData({ ...formData, chegada_fundeio: e.target.value })}
-                className="w-full bg-white dark:bg-cco-darkest border border-slate-300 dark:border-cco-border rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-200 font-mono focus:outline-none focus:border-blue-500"
+                value={formData.inicio_operacao ? formData.inicio_operacao.slice(0, 16) : ''}
+                onChange={(e) => setFormData({ ...formData, inicio_operacao: e.target.value })}
+                className="w-full bg-white dark:bg-cco-panel border border-slate-300 dark:border-cco-border rounded-lg px-3 py-1.5 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500 text-xs"
               />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Se este campo estiver vazio, ele é preenchido automaticamente com a previsão do <strong>AIS</strong>. Caso já tenha informações, elas são mantidas. Pode ser editado manualmente a qualquer momento.
+              </p>
             </div>
           </div>
 

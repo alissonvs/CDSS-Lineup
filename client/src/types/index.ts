@@ -26,6 +26,7 @@ export interface NavioLineup {
   armazem_publico: number; // 0 ou 1
   eta_previsto?: string; // Previsão Oficial de Chegada (SISPORT)
   eta_ais?: string | null; // Previsão transmitida pelo transponder AIS (DataDocked)
+  inicio_operacao?: string | null; // Início da Operação (Previsão / Real)
   chegada_fundeio?: string;
   inicio_atracacao?: string;
   fim_atracacao?: string;
