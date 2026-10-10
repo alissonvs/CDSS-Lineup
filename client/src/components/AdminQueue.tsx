@@ -18,6 +18,7 @@ interface AdminQueueProps {
   onEditNavio: (navio: NavioLineup) => void;
   onDeleteNavio: (navio: NavioLineup) => void;
   onOpenNewNavioModal: () => void;
+  onSelectNavio?: (navio: NavioLineup) => void;
   isProcessing: boolean;
 }
 
@@ -27,6 +28,7 @@ export const AdminQueue: React.FC<AdminQueueProps> = ({
   onEditNavio,
   onDeleteNavio,
   onOpenNewNavioModal,
+  onSelectNavio,
   isProcessing
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -191,7 +193,14 @@ export const AdminQueue: React.FC<AdminQueueProps> = ({
                       <div className="flex items-center space-x-2">
                         <div>
                           <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-1.5">
-                            <span>{navio.nome_navio}</span>
+                            <button
+                              type="button"
+                              onClick={() => onSelectNavio?.(navio)}
+                              title={`Clique para ver os detalhes da escala de ${navio.nome_navio}`}
+                              className="text-left font-bold text-slate-900 dark:text-slate-100 hover:text-blue-600 dark:hover:text-cyan-400 hover:underline transition-colors cursor-pointer"
+                            >
+                              {navio.nome_navio}
+                            </button>
                             {isOperating && (
                               <span className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.2 rounded font-black tracking-wide flex items-center space-x-1">
                                 <span>BERÇO</span>

@@ -304,9 +304,6 @@ export const App: React.FC = () => {
             navios={navios}
             operacional={operacional}
             mares={mares}
-            onSelectNavio={(navio) => {
-              setNavioDetalhesGantt(navio);
-            }}
             scaleDays={scaleDays}
             onScaleChange={setScaleDays}
           />
@@ -330,12 +327,15 @@ export const App: React.FC = () => {
             onEditNavio={handleEditNavio}
             onDeleteNavio={handleRequestDelete}
             onOpenNewNavioModal={handleOpenNewModal}
+            onSelectNavio={(navio) => {
+              setNavioDetalhesGantt(navio);
+            }}
             isProcessing={isProcessing}
           />
         )}
       </main>
 
-      {/* Modal Simplificado para o Gantt Line-Up */}
+      {/* Modal de Detalhes da Embarcação (Acionado pela Gestão & Fila) */}
       {navioDetalhesGantt && (
         <GanttShipDetailsModal
           key={navioDetalhesGantt.id}

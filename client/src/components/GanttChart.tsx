@@ -37,7 +37,7 @@ interface GanttChartProps {
   navios: NavioLineup[];
   operacional: ResumoOperacional | null;
   mares?: MaresResponse | null;
-  onSelectNavio: (navio: NavioLineup) => void;
+  onSelectNavio?: (navio: NavioLineup) => void;
   scaleDays?: 7 | 14 | 28;
   onScaleChange?: (scale: 7 | 14 | 28) => void;
 }
@@ -250,8 +250,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       className="flex-1 flex flex-col h-full w-full bg-slate-50 dark:bg-cco-darkest overflow-hidden relative select-none"
     >
       {/* Barra superior de legenda e informações da CCO */}
-      <div className="bg-white dark:bg-cco-bg px-4 py-2 border-b border-slate-200 dark:border-cco-border flex flex-wrap items-center justify-between text-xs shrink-0 gap-2">
-        <div className="flex items-center space-x-4">
+      <div className="bg-white dark:bg-cco-bg px-4 py-2 border-b border-slate-200 dark:border-cco-border flex flex-wrap items-center text-xs shrink-0 gap-y-2">
+        <div className="flex flex-wrap items-center space-x-4">
           <span className="font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Padronização Oficial CDSS:</span>
           <div className="flex items-center space-x-1.5">
             <span className="w-3 h-3 rounded bg-emerald-500 border border-emerald-400 animate-pulse"></span>
@@ -269,21 +269,15 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             <span className="w-3 h-3 rounded bg-amber-500 border border-amber-400"></span>
             <span className="text-slate-700 dark:text-slate-200 font-medium">Fundeio Previsto (Laranja)</span>
           </div>
-        </div>
 
-        <div className="flex items-center space-x-3 text-slate-500 dark:text-slate-400">
-          <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center space-x-1 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-500/20">
-            <span>🔒</span>
-            <span>Berço Único &bull; Zero Sobreposição</span>
-          </span>
-          <span>&bull;</span>
-          <span className="flex items-center space-x-1">
-            <span className="w-2.5 h-0.5 bg-rose-500"></span>
-            <span className="text-rose-600 dark:text-rose-400 font-mono font-semibold">
+          {/* Identificação da Linha "Agora" agrupada à esquerda */}
+          <div className="flex items-center space-x-1.5 pl-3 border-l border-slate-300 dark:border-slate-700">
+            <span className="w-3 h-0.5 bg-rose-500"></span>
+            <span className="text-rose-600 dark:text-rose-400 font-mono font-semibold whitespace-nowrap">
               Linha "Agora" ({agoraDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}{' '}
               {agoraDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} BRT)
             </span>
-          </span>
+          </div>
         </div>
       </div>
 
@@ -526,9 +520,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
               return (
                 <div
                   key={key}
-                  onClick={() => onSelectNavio(n)}
+                  onClick={onSelectNavio ? () => onSelectNavio(n) : undefined}
                   title={`${isOp ? 'Operando Real' : isTerminoNavioEmCais ? 'Término de Operação' : 'Previsão de Berço'}: ${n.nome_navio} (${b.duracaoHoras}h)`}
-                  className={`absolute h-7 border flex items-center justify-between px-1 text-[10px] font-bold cursor-pointer transition-all hover:brightness-125 z-20 overflow-hidden border-r-2 border-slate-950/80 shadow-md ${roundedMasterClass} ${
+                  className={`absolute h-7 border flex items-center justify-between px-1 text-[10px] font-bold ${
+                    onSelectNavio ? 'cursor-pointer hover:brightness-125' : 'cursor-default'
+                  } z-20 overflow-hidden border-r-2 border-slate-950/80 shadow-md ${roundedMasterClass} ${
                     isUltraShort
                       ? 'border-x-2 border-cyan-300 shadow-[0_0_8px_rgba(59,130,246,0.6)] ring-1 ring-cyan-400'
                       : ''
@@ -670,14 +666,14 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             return (
               <div
                 key={navio.id || navio.imo}
-                onClick={() => onSelectNavio(navio)}
-                className="flex h-20 relative hover:bg-slate-50 dark:hover:bg-cco-hover/30 transition-colors group cursor-pointer z-10 hover:z-40"
+                className="flex h-20 relative hover:bg-slate-50 dark:hover:bg-cco-hover/30 transition-colors group z-10 hover:z-40"
               >
                 {/* Coluna Y-Axis fixa com detalhes da embarcação */}
                 <div
                   onMouseEnter={() => setHoveredNavio(navio)}
                   onMouseLeave={() => setHoveredNavio(null)}
-                  className="w-[26.5rem] min-w-[26.5rem] px-4 py-1.5 bg-white/95 dark:bg-cco-panel/95 border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-20 group-hover:bg-slate-50 dark:group-hover:bg-cco-panel transition-colors relative"
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-[26.5rem] min-w-[26.5rem] px-4 py-1.5 bg-white/95 dark:bg-cco-panel/95 border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-20 group-hover:bg-slate-50 dark:group-hover:bg-cco-panel transition-colors relative cursor-default"
                 >
                   <div className="flex items-center space-x-2.5 overflow-hidden flex-1 min-w-0">
                     {/* Badge da ordem na fila */}
@@ -696,7 +692,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       {/* Linha 1: Nome do Navio + Badge No Berço + Progresso % */}
                       <div className="flex items-center space-x-1.5 min-w-0">
                         <span
-                          className="font-bold text-sm text-slate-900 group-hover:text-blue-600 dark:text-slate-100 dark:group-hover:text-cyan-400 transition-colors truncate"
+                          className="font-bold text-sm text-slate-900 dark:text-slate-100 transition-colors truncate"
                           title={navio.nome_navio}
                         >
                           {navio.nome_navio}
