@@ -196,49 +196,71 @@ export async function recalcularLineupComMotor(): Promise<{
       new Date(berthedAtMs)
     );
 
-    // Duração restante de cais projetada a partir de AGORA (pelo menos as horas estimadas da carga)
-    const horasRestantesMs = Math.max(8, tempoTotalHoras) * 3600000;
-    const etdProjetadoMs = nowMs + horasRestantesMs;
-    const blocos: TimelineBlock[] = [];
-    const caladoCriticoVerde = (navio.calado || 0) > 9.50;
-
-    // A. Bloco Vermelho (Fundeio prévio se houver registro de chegada no fundeio)
-    if (navio.chegada_fundeio) {
-      const anchoredAt = parseDateIso(navio.chegada_fundeio);
-      if (anchoredAt && anchoredAt.getTime() < berthedAtMs) {
-        const anchoredAtMs = anchoredAt.getTime();
-        const duracaoFundeioRealHoras = Math.round(((berthedAtMs - anchoredAtMs) / 3600000) * 10) / 10;
-        blocos.push({
-          tipo: 'VERMELHO',
-          label: `No Fundeio Real • ${duracaoFundeioRealHoras}h`,
-          inicioIso: toIsoUtc(new Date(anchoredAtMs)),
-          fimIso: toIsoUtc(new Date(berthedAtMs)),
-          duracaoHoras: duracaoFundeioRealHoras
-        });
+    // Duração de cais projetada / Desatracação prevista
+    let etdProjetadoMs: number;
+    if (navio.fim_atracacao) {
+      const parsedFim = parseDateIso(navio.fim_atracacao);
+      if (parsedFim) {
+        etdProjetadoMs = parsedFim.getTime();
+      } else {
+        etdProjetadoMs = berthedAtMs + Math.max(8, tempoTotalHoras) * 3600000;
       }
+    } else {
+      etdProjetadoMs = berthedAtMs + Math.max(8, tempoTotalHoras) * 3600000;
     }
 
-    // B. Bloco Verde (Operando Real: Passado até NOW)
-    const duracaoVerdeHoras = Math.round(((nowMs - berthedAtMs) / 3600000) * 10) / 10;
+    // Determinação precisa dos 4 Marcos Temporais do Navio no Berço
+    // Marco 3 (Início Operação):
+    const m3 = berthedAtMs;
+    // Marco 4 (Desatracação Prevista):
+    const m4 = etdProjetadoMs;
+    // Marco 2 (Chegada ao Fundeio):
+    let m2 = navio.chegada_fundeio ? (parseDateIso(navio.chegada_fundeio)?.getTime() || (m3 - 28 * 3600000)) : (m3 - 28 * 3600000);
+    if (m2 >= m3) m2 = m3 - 18 * 3600000;
+    // Marco 1 (Previsão Oficial SISPORT):
+    let m1 = navio.eta_previsto ? (parseDateIso(navio.eta_previsto)?.getTime() || (m2 - 14 * 3600000)) : (m2 - 14 * 3600000);
+    if (m1 >= m2) m1 = m2 - 14 * 3600000;
+
+    const blocos: TimelineBlock[] = [];
+    const duracaoBloco1 = Math.round(((m2 - m1) / 3600000) * 10) / 10;
+    const duracaoBloco2 = Math.round(((m3 - m2) / 3600000) * 10) / 10;
+    const duracaoBloco3 = Math.round(((m4 - m3) / 3600000) * 10) / 10;
+
+    // Bloco 1: Laranja (PREVISTO SISPORT ➔ FUNDEIO)
     blocos.push({
-      tipo: 'VERDE',
-      label: `Operando Real • ${duracaoVerdeHoras}h`,
-      inicioIso: toIsoUtc(new Date(berthedAtMs)),
-      fimIso: toIsoUtc(new Date(nowMs)),
-      duracaoHoras: duracaoVerdeHoras,
-      caladoCritico: caladoCriticoVerde
+      tipo: 'PREVISTO_FUNDEIO',
+      label: `PREVISTO SISPORT ➔ FUNDEIO`,
+      inicioIso: toIsoUtc(new Date(m1)),
+      fimIso: toIsoUtc(new Date(m2)),
+      duracaoHoras: duracaoBloco1
     });
 
-    // C. Bloco Azul (Previsão Término: NOW até ETD)
-    const duracaoAzulHoras = Math.round(((etdProjetadoMs - nowMs) / 3600000) * 10) / 10;
+    // Bloco 2: Vermelho (⚓ FUNDEADO ➔ INÍCIO OPERAÇÃO)
     blocos.push({
-      tipo: 'AZUL',
-      label: `Previsão Término • ${duracaoAzulHoras}h`,
-      inicioIso: toIsoUtc(new Date(nowMs)),
-      fimIso: toIsoUtc(new Date(etdProjetadoMs)),
-      duracaoHoras: duracaoAzulHoras,
-      caladoCritico: caladoCriticoVerde
+      tipo: 'FUNDEADO_OPERACAO',
+      label: `⚓ FUNDEADO ➔ INÍCIO OPERAÇÃO`,
+      inicioIso: toIsoUtc(new Date(m2)),
+      fimIso: toIsoUtc(new Date(m3)),
+      duracaoHoras: duracaoBloco2
     });
+
+    // Bloco 3: Verde (⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO)
+    blocos.push({
+      tipo: 'OPERACAO_DESATRACACAO',
+      label: `⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO`,
+      inicioIso: toIsoUtc(new Date(m3)),
+      fimIso: toIsoUtc(new Date(m4)),
+      duracaoHoras: duracaoBloco3,
+      caladoCritico: false
+    });
+
+    navio.marcos = [
+      { id: 'previsaoSisport', label: 'Previsão SISPORT', dataIso: toIsoUtc(new Date(m1)) },
+      { id: 'fundeio', label: 'Fundeio', dataIso: toIsoUtc(new Date(m2)) },
+      { id: 'inicioOperacao', label: 'Início Operação', dataIso: toIsoUtc(new Date(m3)) },
+      { id: 'desatracacao', label: 'Prevista Desatracação', dataIso: toIsoUtc(new Date(m4)) }
+    ];
+
     ultimoFimBerco = new Date(etdProjetadoMs);
 
     const duracaoTotalGeral = Math.round(((etdProjetadoMs - berthedAtMs) / 3600000) * 10) / 10;
@@ -264,12 +286,19 @@ export async function recalcularLineupComMotor(): Promise<{
     totalVolumeT += navio.volume_t || 0;
 
     // Data de prontidão do navio (Início da Operação > Chegada no Fundeio > ETA)
-    const etaD = parseDateIso(navio.inicio_operacao || navio.chegada_fundeio || navio.eta_previsto) || agora;
+    const etaD = parseDateIso(navio.chegada_fundeio || navio.eta_previsto) || agora;
     const etaMs = etaD.getTime();
 
-    // Regra matemática do encadeamento estrito de berço único:
-    // Início = max(cursorBercoMs, etaMs)
-    const inicioOperacaoMs = Math.max(cursorBercoMs, etaMs);
+    // Regra do encadeamento estrito de berço único com respeito a agendamento explícito:
+    let inicioOperacaoMs = cursorBercoMs;
+    if (navio.inicio_operacao) {
+      const parsedOp = parseDateIso(navio.inicio_operacao);
+      if (parsedOp) {
+        inicioOperacaoMs = Math.max(cursorBercoMs, parsedOp.getTime());
+      }
+    } else {
+      inicioOperacaoMs = Math.max(cursorBercoMs, etaMs);
+    }
     const inicioOperacaoDate = new Date(inicioOperacaoMs);
 
     const { duracaoBaseHoras, horasChuva, tempoTotalHoras } = await calcularDuracaoNavio(
@@ -278,64 +307,74 @@ export async function recalcularLineupComMotor(): Promise<{
       inicioOperacaoDate
     );
 
-    const fimOperacaoMs = inicioOperacaoMs + tempoTotalHoras * 3600000;
-    const blocos: TimelineBlock[] = [];
-
-    // Se o navio já estiver fisicamente fundeado na barra (status VERMELHO)
-    if (navio.status_cor === 'VERMELHO' || navio.chegada_fundeio) {
-      const anchoredAtMs = parseDateIso(navio.chegada_fundeio)?.getTime() || etaMs;
-      const fimFundeioRealMs = Math.min(nowMs, inicioOperacaoMs);
-      const duracaoFundeioReal = Math.round(((fimFundeioRealMs - anchoredAtMs) / 3600000) * 10) / 10;
-
-      // Bloco Vermelho: Tempo decorrido de fundeio real até agora
-      blocos.push({
-        tipo: 'VERMELHO',
-        label: `No Fundeio Real • ${duracaoFundeioReal}h`,
-        inicioIso: toIsoUtc(new Date(anchoredAtMs)),
-        fimIso: toIsoUtc(new Date(fimFundeioRealMs)),
-        duracaoHoras: duracaoFundeioReal
-      });
-
-      // Bloco Laranja: Espera projetada de agora até o início da atracação
-      if (inicioOperacaoMs > nowMs) {
-        const duracaoProjetado = Math.round(((inicioOperacaoMs - nowMs) / 3600000) * 10) / 10;
-        blocos.push({
-          tipo: 'LARANJA',
-          label: `Fundeio Projetado • ${duracaoProjetado}h`,
-          inicioIso: toIsoUtc(new Date(nowMs)),
-          fimIso: toIsoUtc(new Date(inicioOperacaoMs)),
-          duracaoHoras: duracaoProjetado
-        });
+    let fimOperacaoMs: number;
+    if (navio.fim_atracacao) {
+      const parsedFim = parseDateIso(navio.fim_atracacao);
+      if (parsedFim && parsedFim.getTime() > inicioOperacaoMs) {
+        fimOperacaoMs = parsedFim.getTime();
+      } else {
+        fimOperacaoMs = inicioOperacaoMs + tempoTotalHoras * 3600000;
       }
     } else {
-      // Navio esperado em trânsito: Bloco Laranja do ETA até o início da atracação
-      if (inicioOperacaoMs > etaMs) {
-        const duracaoPrevisto = Math.round(((inicioOperacaoMs - etaMs) / 3600000) * 10) / 10;
-        blocos.push({
-          tipo: 'LARANJA',
-          label: `Fundeio Previsto (ETA) • ${duracaoPrevisto}h`,
-          inicioIso: toIsoUtc(new Date(etaMs)),
-          fimIso: toIsoUtc(new Date(inicioOperacaoMs)),
-          duracaoHoras: duracaoPrevisto
-        });
-      }
+      fimOperacaoMs = inicioOperacaoMs + tempoTotalHoras * 3600000;
     }
 
-    // Bloco Azul de Operação: Conectado perfeitamente ao final do bloco laranja
-    const caladoCritico = (navio.calado || 0) > 9.50;
-    const duracaoOperacaoHoras = Math.round(tempoTotalHoras * 10) / 10;
-    const labelOperacao = caladoCritico
-      ? `⚠️ RESTRITO (>9.5m) • ${navio.nome_navio} • ${duracaoOperacaoHoras.toFixed(1)}h`
-      : `Operação • ${duracaoOperacaoHoras.toFixed(1)}h`;
+    const caladoCritico = false;
 
+    // Determinação precisa dos 4 Marcos Temporais da Embarcação na Fila
+    // Marco 3 (Início Operação):
+    const m3 = inicioOperacaoMs;
+    // Marco 4 (Desatracação Prevista):
+    const m4 = fimOperacaoMs;
+    // Marco 2 (Chegada ao Fundeio):
+    let m2 = navio.chegada_fundeio
+      ? (parseDateIso(navio.chegada_fundeio)?.getTime() || (m3 - 28 * 3600000))
+      : (m3 - 28 * 3600000);
+    if (m2 >= m3) m2 = m3 - 18 * 3600000;
+
+    // Marco 1 (Previsão Oficial SISPORT):
+    let m1 = navio.eta_previsto ? (parseDateIso(navio.eta_previsto)?.getTime() || (m2 - 14 * 3600000)) : (m2 - 14 * 3600000);
+    if (m1 >= m2) m1 = m2 - 14 * 3600000;
+
+    const blocos: TimelineBlock[] = [];
+    const duracaoBloco1 = Math.round(((m2 - m1) / 3600000) * 10) / 10;
+    const duracaoBloco2 = Math.round(((m3 - m2) / 3600000) * 10) / 10;
+    const duracaoBloco3 = Math.round(((m4 - m3) / 3600000) * 10) / 10;
+
+    // Bloco 1: Laranja (PREVISTO SISPORT ➔ FUNDEIO)
     blocos.push({
-      tipo: 'AZUL',
-      label: labelOperacao,
-      inicioIso: toIsoUtc(new Date(inicioOperacaoMs)),
-      fimIso: toIsoUtc(new Date(fimOperacaoMs)),
-      duracaoHoras: duracaoOperacaoHoras,
+      tipo: 'PREVISTO_FUNDEIO',
+      label: `PREVISTO SISPORT ➔ FUNDEIO`,
+      inicioIso: toIsoUtc(new Date(m1)),
+      fimIso: toIsoUtc(new Date(m2)),
+      duracaoHoras: duracaoBloco1
+    });
+
+    // Bloco 2: Vermelho (⚓ FUNDEADO ➔ INÍCIO OPERAÇÃO)
+    blocos.push({
+      tipo: 'FUNDEADO_OPERACAO',
+      label: `⚓ FUNDEADO ➔ INÍCIO OPERAÇÃO`,
+      inicioIso: toIsoUtc(new Date(m2)),
+      fimIso: toIsoUtc(new Date(m3)),
+      duracaoHoras: duracaoBloco2
+    });
+
+    // Bloco 3: Verde/Azul (⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO)
+    blocos.push({
+      tipo: 'OPERACAO_DESATRACACAO',
+      label: `⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO`,
+      inicioIso: toIsoUtc(new Date(m3)),
+      fimIso: toIsoUtc(new Date(m4)),
+      duracaoHoras: duracaoBloco3,
       caladoCritico
     });
+
+    navio.marcos = [
+      { id: 'previsaoSisport', label: 'Previsão SISPORT', dataIso: toIsoUtc(new Date(m1)) },
+      { id: 'fundeio', label: 'Fundeio', dataIso: toIsoUtc(new Date(m2)) },
+      { id: 'inicioOperacao', label: 'Início Operação', dataIso: toIsoUtc(new Date(m3)) },
+      { id: 'desatracacao', label: 'Prevista Desatracação', dataIso: toIsoUtc(new Date(m4)) }
+    ];
 
     // Atualiza o cursor do berço para o próximo navio com folga de manobra
     cursorBercoMs = fimOperacaoMs + DELTA_T_MANOBRA * 3600000;
@@ -376,13 +415,13 @@ export async function recalcularLineupComMotor(): Promise<{
 
   naviosFilaProcessados.forEach((item, index) => {
     item.ordem_fila = navioVerdeProcessado ? index + 2 : index + 1;
-    const blocoAzul = item.blocos?.find((b) => b.tipo === 'AZUL');
-    if (blocoAzul) {
+    const blocoOperacao = item.blocos?.find((b) => b.tipo === 'OPERACAO_DESATRACACAO' || b.tipo === 'AZUL');
+    if (blocoOperacao) {
       const caladoCritico = (item.calado || 0) > 9.50;
-      blocoAzul.caladoCritico = caladoCritico;
-      blocoAzul.label = caladoCritico
-        ? `⚠️ RESTRITO (>9.5m) • ${item.nome_navio} • ${Number(blocoAzul.duracaoHoras).toFixed(1)}h`
-        : `Operação • ${Number(blocoAzul.duracaoHoras).toFixed(1)}h`;
+      blocoOperacao.caladoCritico = caladoCritico;
+      blocoOperacao.label = caladoCritico
+        ? `⚠️ RESTRITO (>9.5m) • INÍCIO OP ➔ DESATRAC.`
+        : `⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO`;
     }
     naviosProcessados.push(item);
   });
@@ -410,12 +449,12 @@ export async function recalcularLineupComMotor(): Promise<{
   const horasMes = 720;
   const taxaOcupacao = Math.min(100, Math.round((totalHorasOcupadasBerco / horasMes) * 1000) / 10);
 
-  // Total de navios com espera ativa (bloco VERMELHO ou LARANJA)
+  // Total de navios com espera ativa (bloco FUNDEADO_OPERACAO, VERMELHO ou LARANJA)
   const totalEmEspera = naviosProcessados.filter(
     (n) =>
       n.status_cor !== 'VERDE' &&
       n.blocos &&
-      n.blocos.some((b) => b.tipo === 'VERMELHO' || b.tipo === 'LARANJA')
+      n.blocos.some((b) => b.tipo === 'FUNDEADO_OPERACAO' || b.tipo === 'VERMELHO' || b.tipo === 'LARANJA')
   ).length;
 
   // Sincroniza a tábua de marés da DHN no PostgreSQL para a janela operacional

@@ -5,7 +5,6 @@ import type {
   MaresResponse
 } from '../types';
 import {
-  CloudRain,
   Ship,
   Anchor,
   Package,
@@ -218,6 +217,174 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     }
   };
 
+  const formatarDataHoraMarco = (dateStr?: string | null): string => {
+    if (!dateStr) return '';
+    const ms = parseDateToMs(dateStr);
+    if (isNaN(ms)) return '';
+    const d = new Date(ms);
+    const dia = d.getDate().toString().padStart(2, '0');
+    const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const mes = meses[d.getMonth()];
+    const hora = d.getHours().toString().padStart(2, '0');
+    const min = d.getMinutes().toString().padStart(2, '0');
+    return `${dia}/${mes} ${hora}:${min}`;
+  };
+
+  const renderVesselBlocksAndMilestones = (navio: NavioLineup) => {
+    return (
+      <>
+        {/* NÍVEL 1: Cadeia Contínua dos 3 Blocos Sequenciais (Laranja -> Vermelho -> Verde) */}
+        <div className="relative h-9 w-full">
+          {navio.blocos && navio.blocos.length > 0 ? (
+            navio.blocos.map((bloco, bIdx) => {
+              const bStartMs = parseDateToMs(bloco.inicioIso);
+              const bEndMs = parseDateToMs(bloco.fimIso);
+              if (isNaN(bStartMs) || isNaN(bEndMs)) return null;
+
+              if (bEndMs <= timelineStart.getTime() || bStartMs >= timelineEnd.getTime()) {
+                return null;
+              }
+
+              const leftPct = Math.max(0, Math.min(100, ((bStartMs - timelineStart.getTime()) / totalMs) * 100));
+              const rightPct = Math.max(0, Math.min(100, ((bEndMs - timelineStart.getTime()) / totalMs) * 100));
+              const widthPct = Math.max(0.4, rightPct - leftPct);
+              const blockPx = (widthPct / 100) * trackWidthPx;
+              const isUltraShort = blockPx < 15;
+              const overflowsRight = bEndMs > timelineEnd.getTime();
+              const overflowsLeft = bStartMs < timelineStart.getTime();
+
+              if (rightPct <= 0 || leftPct >= 100) return null;
+
+              let blockStyle = '';
+              let roundedClass = '';
+
+              if (bloco.tipo === 'PREVISTO_FUNDEIO' || bloco.tipo === 'LARANJA') {
+                blockStyle = 'bg-amber-600 border border-amber-400 text-white shadow-md font-bold';
+                roundedClass = overflowsLeft ? 'rounded-none' : 'rounded-l-lg';
+              } else if (bloco.tipo === 'FUNDEADO_OPERACAO' || bloco.tipo === 'VERMELHO') {
+                blockStyle = 'bg-red-700 border-y border-red-500 text-white shadow-md font-bold';
+                roundedClass = 'rounded-none';
+              } else {
+                blockStyle = 'bg-emerald-600 border border-emerald-400 text-white shadow-md font-bold';
+                roundedClass = overflowsRight ? 'rounded-none' : 'rounded-r-lg';
+              }
+
+              const ultraShortStyle = isUltraShort
+                ? 'border-x-2 border-cyan-300 shadow-[0_0_8px_rgba(59,130,246,0.6)] ring-1 ring-cyan-400'
+                : '';
+
+              return (
+                <div
+                  key={`block-${navio.id}-${bIdx}`}
+                  onClick={onSelectNavio ? () => onSelectNavio(navio) : undefined}
+                  title={`${bloco.label} (${bloco.duracaoHoras}h)`}
+                  className={`absolute h-9 top-0 border flex items-center justify-center px-2 text-xs font-bold transition-all z-10 hover:brightness-110 overflow-hidden ${roundedClass} ${blockStyle} ${ultraShortStyle} ${onSelectNavio ? 'cursor-pointer' : 'cursor-default'}`}
+                  style={{
+                    left: `${leftPct}%`,
+                    width: `${widthPct}%`,
+                    minWidth: '10px'
+                  }}
+                >
+                  {isUltraShort ? null : bloco.tipo === 'PREVISTO_FUNDEIO' || bloco.tipo === 'LARANJA' ? (
+                    blockPx >= 140 ? (
+                      <span className="tracking-tight text-xs font-black whitespace-nowrap text-center">
+                        PREVISTO SISPORT ➔ FUNDEIO
+                      </span>
+                    ) : blockPx >= 70 ? (
+                      <span className="tracking-tight text-[10px] font-extrabold truncate text-center w-full">
+                        SISPORT ➔ FUNDEIO
+                      </span>
+                    ) : (
+                      <span className="tracking-tight text-[9.5px] font-extrabold text-center w-full truncate">
+                        PREVISTO
+                      </span>
+                    )
+                  ) : bloco.tipo === 'FUNDEADO_OPERACAO' || bloco.tipo === 'VERMELHO' ? (
+                    blockPx >= 140 ? (
+                      <span className="tracking-tight text-xs font-black whitespace-nowrap text-center">
+                        ⚓ FUNDEADO ➔ INÍCIO OPERAÇÃO
+                      </span>
+                    ) : blockPx >= 70 ? (
+                      <span className="tracking-tight text-[10px] font-extrabold truncate text-center w-full">
+                        ⚓ FUNDEADO ➔ OP
+                      </span>
+                    ) : (
+                      <span className="tracking-tight text-[9.5px] font-extrabold text-center w-full truncate">
+                        ⚓ FUNDEADO
+                      </span>
+                    )
+                  ) : (
+                    blockPx >= 140 ? (
+                      <span className="tracking-tight text-xs font-black whitespace-nowrap text-center">
+                        ⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO
+                      </span>
+                    ) : blockPx >= 70 ? (
+                      <span className="tracking-tight text-[10px] font-extrabold truncate text-center w-full">
+                        ⚙ INÍCIO OP ➔ DESATRAC.
+                      </span>
+                    ) : (
+                      <span className="tracking-tight text-[9.5px] font-extrabold text-center w-full truncate">
+                        ⚙ OPERAÇÃO
+                      </span>
+                    )
+                  )}
+
+                  {overflowsRight && (
+                    <span
+                      className="absolute right-1 top-1/2 -translate-y-1/2 font-black text-[10px] text-white/95 drop-shadow pointer-events-none select-none tracking-tighter"
+                      title="Continua além da escala visível"
+                    >
+                      ❯❯
+                    </span>
+                  )}
+                </div>
+              );
+            })
+          ) : null}
+        </div>
+
+        {/* NÍVEL 2: Os 4 Marcos com Setas (▲) e Datas Explicitas (Conforme Esboço) */}
+        <div className="relative h-16 w-full mt-1.5 pointer-events-none">
+          {navio.marcos && navio.marcos.map((marco, marcoIdx) => {
+            const mMs = parseDateToMs(marco.dataIso);
+            if (isNaN(mMs)) return null;
+
+            const mPct = ((mMs - timelineStart.getTime()) / totalMs) * 100;
+            if (mPct < -5 || mPct > 105) return null;
+
+            const prevMarco = marcoIdx > 0 && navio.marcos ? navio.marcos[marcoIdx - 1] : null;
+            const prevMs = prevMarco ? parseDateToMs(prevMarco.dataIso) : NaN;
+            const prevPct = !isNaN(prevMs) ? ((prevMs - timelineStart.getTime()) / totalMs) * 100 : -999;
+            const isTooClose = Math.abs(mPct - prevPct) < 5.5;
+            const isStaggered = (marco.id === 'fundeio' || marco.id === 'desatracacao') && isTooClose;
+
+            const dataFmt = formatarDataHoraMarco(marco.dataIso);
+            const icon = marco.id === 'fundeio' ? '⚓ ' : marco.id === 'inicioOperacao' ? '⚙ ' : '';
+
+            return (
+              <div
+                key={`marco-${navio.id}-${marco.id}`}
+                className="absolute -translate-x-1/2 flex flex-col items-center pointer-events-none select-none z-10 transition-all drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]"
+                style={{
+                  left: `${Math.max(0, Math.min(100, mPct))}%`,
+                  top: isStaggered ? '20px' : '0px'
+                }}
+              >
+                <span className="text-xs text-slate-400 dark:text-slate-300 leading-none">▲</span>
+                <span className="text-[11px] font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap leading-tight mt-0.5 tracking-tight">
+                  {icon}{marco.label}
+                </span>
+                <span className="text-[10px] font-bold font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap leading-tight">
+                  ({dataFmt})
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+  };
+
   // Métricas desacopladas da Taxa de Ocupação Mensal vs Backlog Total da Carteira
   const totalHorasBacklog = operacional?.horas_ocupadas ?? navios.reduce((acc, n) => acc + (n.duracao_estimada_horas || 0), 0);
   const horasJanelaMes = 720; // 30 dias nominais x 24 horas
@@ -254,20 +421,16 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         <div className="flex flex-wrap items-center space-x-4">
           <span className="font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Padronização Oficial CDSS:</span>
           <div className="flex items-center space-x-1.5">
-            <span className="w-3 h-3 rounded bg-emerald-500 border border-emerald-400 animate-pulse"></span>
-            <span className="text-slate-700 dark:text-slate-200 font-medium">Operando Real (Verde)</span>
+            <span className="w-3 h-3 rounded bg-amber-600 border border-amber-400"></span>
+            <span className="text-slate-700 dark:text-slate-200 font-medium">Previsto SISPORT (Laranja)</span>
           </div>
           <div className="flex items-center space-x-1.5">
-            <span className="w-3 h-3 rounded bg-blue-600 border border-blue-400"></span>
-            <span className="text-slate-700 dark:text-slate-200 font-medium">Previsão de Operação (Azul)</span>
+            <span className="w-3 h-3 rounded bg-red-700 border border-red-500"></span>
+            <span className="text-slate-700 dark:text-slate-200 font-medium">Fundeado / Barra (Vermelho)</span>
           </div>
           <div className="flex items-center space-x-1.5">
-            <span className="w-3 h-3 rounded bg-rose-500 border border-rose-400"></span>
-            <span className="text-slate-700 dark:text-slate-200 font-medium">No Fundeio Real (Vermelho)</span>
-          </div>
-          <div className="flex items-center space-x-1.5">
-            <span className="w-3 h-3 rounded bg-amber-500 border border-amber-400"></span>
-            <span className="text-slate-700 dark:text-slate-200 font-medium">Fundeio Previsto (Laranja)</span>
+            <span className="w-3 h-3 rounded bg-emerald-500 border border-emerald-400"></span>
+            <span className="text-slate-700 dark:text-slate-200 font-medium">Operação / Cais (Verde)</span>
           </div>
 
           {/* Identificação da Linha "Agora" agrupada à esquerda */}
@@ -439,10 +602,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
               <span className="text-emerald-500 dark:text-emerald-400 font-extrabold text-base">⚓</span>
               <div>
                 <div className="font-extrabold text-xs text-slate-900 dark:text-white uppercase tracking-wider">
-                  Berço Comercial (CDSS)
+                  Ocupação do Berço
                 </div>
                 <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                  Cais Único de Operação
+                  Cais Comercial Único • Berço 1
                 </div>
               </div>
             </div>
@@ -474,7 +637,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             )}
 
             {navios.flatMap((n) => {
-              const berthBlocks = (n.blocos || []).filter((b) => b.tipo === 'VERDE' || b.tipo === 'AZUL');
+              const berthBlocks = (n.blocos || []).filter((b) => b.tipo === 'OPERACAO_DESATRACACAO' || b.tipo === 'VERDE' || b.tipo === 'AZUL');
               if (berthBlocks.length > 0) {
                 return berthBlocks.map((b, bIdx) => ({
                   navio: n,
@@ -485,7 +648,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
               return [{
                 navio: n,
                 bloco: {
-                  tipo: (n.status_cor === 'VERDE' ? 'VERDE' : 'AZUL') as 'VERDE' | 'AZUL',
+                  tipo: 'OPERACAO_DESATRACACAO' as const,
                   label: n.nome_navio,
                   inicioIso: n.inicio_atracacao || '',
                   fimIso: n.fim_atracacao || '',
@@ -506,94 +669,30 @@ export const GanttChart: React.FC<GanttChartProps> = ({
               const leftPct = Math.max(0, Math.min(100, ((bStartMs - timelineStart.getTime()) / totalMs) * 100));
               const rightPct = Math.max(0, Math.min(100, ((bEndMs - timelineStart.getTime()) / totalMs) * 100));
               const widthPct = Math.max(0.4, rightPct - leftPct);
-              const blockPx = (widthPct / 100) * trackWidthPx;
-              const isUltraShort = blockPx < 15;
 
               if (rightPct <= 0 || leftPct >= 100) return null;
 
-              const isOp = b.tipo === 'VERDE';
-              const isTerminoNavioEmCais = n.status_cor === 'VERDE' && b.tipo === 'AZUL';
-              const isCaladoCritico = b.caladoCritico || ((n.calado || 0) > 9.50 && (b.tipo === 'AZUL' || b.tipo === 'VERDE'));
+              const isOp = b.tipo === 'VERDE' || (n.status_cor === 'VERDE' && b.tipo === 'OPERACAO_DESATRACACAO');
               const overflowsRight = bEndMs > timelineEnd.getTime();
-              const roundedMasterClass = overflowsRight ? 'rounded-l rounded-r-none' : 'rounded';
+              const roundedMasterClass = overflowsRight ? 'rounded-l-lg rounded-r-none' : 'rounded-lg';
 
               return (
                 <div
                   key={key}
                   onClick={onSelectNavio ? () => onSelectNavio(n) : undefined}
-                  title={`${isOp ? 'Operando Real' : isTerminoNavioEmCais ? 'Término de Operação' : 'Previsão de Berço'}: ${n.nome_navio} (${b.duracaoHoras}h)`}
-                  className={`absolute h-7 border flex items-center justify-between px-1 text-[10px] font-bold ${
+                  title={`${isOp ? 'Operando no Berço' : 'Previsão de Berço'}: ${n.nome_navio} (${b.duracaoHoras}h)`}
+                  className={`absolute h-8 border flex items-center justify-center px-2 text-[11px] font-bold ${
                     onSelectNavio ? 'cursor-pointer hover:brightness-125' : 'cursor-default'
-                  } z-20 overflow-hidden border-r-2 border-slate-950/80 shadow-md ${roundedMasterClass} ${
-                    isUltraShort
-                      ? 'border-x-2 border-cyan-300 shadow-[0_0_8px_rgba(59,130,246,0.6)] ring-1 ring-cyan-400'
-                      : ''
-                  } ${
-                    isCaladoCritico
-                      ? 'border-red-400 text-white shadow-md shadow-red-950/40 ring-1 ring-red-400 font-extrabold'
-                      : isOp
-                      ? 'bg-emerald-600 border-emerald-300 text-white shadow-emerald-500/40 ring-1 ring-emerald-300'
-                      : 'bg-blue-600 border-blue-400 text-white shadow-sm'
-                  }`}
+                  } z-20 overflow-hidden border border-emerald-400 bg-emerald-600 text-white shadow-md ${roundedMasterClass}`}
                   style={{
                     left: `${leftPct}%`,
                     width: `${widthPct}%`,
-                    minWidth: '10px',
-                    ...(isCaladoCritico
-                      ? {
-                          backgroundImage: 'repeating-linear-gradient(45deg, #dc2626, #dc2626 8px, #991b1b 8px, #991b1b 16px)'
-                        }
-                      : {})
+                    minWidth: '10px'
                   }}
                 >
-                  {isOp ? (
-                    /* Bloco Verde de Operação Real: Micro-label condicional de alta densidade */
-                    blockPx < 80 ? (
-                      /* Se < 80px: suprima o nome e exiba estritamente o valor em negrito */
-                      <span className="font-mono font-black text-[9.5px] text-center w-full">
-                        {Number(b.duracaoHoras).toFixed(1)}h
-                      </span>
-                    ) : (
-                      /* Se >= 80px: exiba o nome e a duração: ${navio.nome} • ${duracao}h */
-                      <div className="flex items-center justify-center gap-1.5 w-full px-1 text-center truncate">
-                        <span className="shrink-0 text-xs">🟢</span>
-                        <span className="truncate tracking-tight font-extrabold text-[10px]">
-                          {n.nome_navio}
-                        </span>
-                        <span className="opacity-60 text-white shrink-0">•</span>
-                        <span className="font-mono text-[9px] font-black shrink-0">
-                          {Number(b.duracaoHoras).toFixed(1)}h
-                        </span>
-                      </div>
-                    )
-                  ) : blockPx >= 110 ? (
-                    <div className="flex items-center justify-center gap-1.5 w-full px-1 text-center truncate">
-                      <span className="shrink-0 text-xs">{isCaladoCritico ? '⚠️' : '🔵'}</span>
-                      <span className="truncate tracking-tight font-extrabold text-[10px]">
-                        {isCaladoCritico
-                          ? `[RESTRITO >9.5m] ${isTerminoNavioEmCais ? `Término ${n.nome_navio}` : `#${n.ordem_fila} ${n.nome_navio}`}`
-                          : isTerminoNavioEmCais
-                          ? `Término ${n.nome_navio}`
-                          : `#${n.ordem_fila} ${n.nome_navio}`}
-                      </span>
-                      <span className="opacity-60 text-white shrink-0">•</span>
-                      <span className="font-mono text-[9px] font-black shrink-0">
-                        {Number(b.duracaoHoras).toFixed(1)}h
-                      </span>
-                    </div>
-                  ) : blockPx >= 55 ? (
-                    <div className="flex items-center justify-center gap-1 w-full px-0.5 text-[9px] text-center truncate">
-                      <span className="truncate font-bold">
-                        {isTerminoNavioEmCais ? `Término ${n.nome_navio.slice(0, 5)}` : `#${n.ordem_fila} ${n.nome_navio.slice(0, 6)}`}
-                      </span>
-                      <span className="opacity-60 text-white shrink-0">•</span>
-                      <span className="font-mono font-black shrink-0">{Number(b.duracaoHoras).toFixed(1)}h</span>
-                    </div>
-                  ) : blockPx >= 20 ? (
-                    <span className="font-mono font-black text-[9px] text-center w-full">
-                      {Number(b.duracaoHoras).toFixed(1)}h
-                    </span>
-                  ) : null}
+                  <span className="truncate tracking-tight font-extrabold text-[11px] text-center uppercase">
+                    {isOp ? `OPERANDO: ${n.nome_navio}` : `PREVISÃO: #${n.ordem_fila} ${n.nome_navio}`}
+                  </span>
 
                   {overflowsRight && (
                     <span
@@ -625,11 +724,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   ? 'repeating-linear-gradient(45deg, rgba(2,6,23,0.3) 0px, rgba(2,6,23,0.3) 12px, rgba(15,23,42,0.3) 12px, rgba(15,23,42,0.3) 24px)'
                   : 'repeating-linear-gradient(45deg, rgba(203,213,225,0.35) 0px, rgba(203,213,225,0.35) 12px, rgba(241,245,249,0.35) 12px, rgba(241,245,249,0.35) 24px)'
               }}
-            >
-              <div className="absolute top-2 left-2 text-[9px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-widest bg-white/90 dark:bg-slate-950/80 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800 shadow-sm">
-                Histórico Consumado
-              </div>
-            </div>
+            />
           )}
 
           {/* Linha vertical vermelha que desce por todo o corpo da grade */}
@@ -637,7 +732,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             <div
               className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.9)] -translate-x-1/2"
               style={{ left: `calc(26.5rem + (100% - 26.5rem) * ${agoraPercent / 100})` }}
-            ></div>
+            />
           )}
 
           {/* Grade de fundo (linhas verticais dos dias com destaque para fins de semana) */}
@@ -666,33 +761,50 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             return (
               <div
                 key={navio.id || navio.imo}
-                className="flex h-20 relative hover:bg-slate-50 dark:hover:bg-cco-hover/30 transition-colors group z-10 hover:z-40"
+                className="flex h-32 relative hover:bg-slate-50 dark:hover:bg-cco-hover/30 transition-colors group z-10 hover:z-40 border-b border-slate-200/80 dark:border-cco-border/30"
               >
-                {/* Coluna Y-Axis fixa com detalhes da embarcação */}
+                {/* Coluna Y-Axis fixa com detalhes da embarcação fiel ao esboço */}
                 <div
                   onMouseEnter={() => setHoveredNavio(navio)}
                   onMouseLeave={() => setHoveredNavio(null)}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-[26.5rem] min-w-[26.5rem] px-4 py-1.5 bg-white/95 dark:bg-cco-panel/95 border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-20 group-hover:bg-slate-50 dark:group-hover:bg-cco-panel transition-colors relative cursor-default"
+                  className="w-[26.5rem] min-w-[26.5rem] px-4 py-2 bg-white/95 dark:bg-cco-panel/95 border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-20 group-hover:bg-slate-50 dark:group-hover:bg-cco-panel transition-colors relative cursor-default"
                 >
-                  <div className="flex items-center space-x-2.5 overflow-hidden flex-1 min-w-0">
+                  <div className="flex items-center space-x-3 overflow-hidden flex-1 min-w-0">
                     {/* Badge da ordem na fila */}
                     <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
                         isOperating
                           ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400'
-                          : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-cco-darkest dark:text-slate-300 dark:border-cco-border'
+                          : 'bg-slate-800 text-slate-300 border border-slate-700'
                       }`}
                     >
-                      {navio.ordem_fila}
+                      {navio.ordem_fila.toString().padStart(2, '0')}
                     </div>
 
-                    {/* Dados Centrais do Navio estruturados em 3 linhas sem quebras parasitárias */}
+                    {/* Dados Centrais do Navio estruturados fielmente ao esboço */}
                     <div className="flex-1 min-w-0 flex flex-col justify-center space-y-0.5 overflow-hidden">
+                      {/* Top subheader: 1º NAVIO • OPERANDO ou 2º NAVIO • Na fila */}
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {navio.ordem_fila}º NAVIO
+                        </span>
+                        {isOperating ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-extrabold flex items-center space-x-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>• OPERANDO</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 dark:text-slate-500 font-medium">
+                            Na fila
+                          </span>
+                        )}
+                      </div>
+
                       {/* Linha 1: Nome do Navio + Badge No Berço + Progresso % */}
                       <div className="flex items-center space-x-1.5 min-w-0">
                         <span
-                          className="font-bold text-sm text-slate-900 dark:text-slate-100 transition-colors truncate"
+                          className="font-extrabold text-sm text-slate-900 dark:text-slate-100 transition-colors truncate"
                           title={navio.nome_navio}
                         >
                           {navio.nome_navio}
@@ -936,8 +1048,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   )}
                 </div>
 
-                {/* Área da Linha do Tempo (Gantt Track) com Blocos Discretos e Micro-Labels Inteligentes */}
-                <div className="flex-1 relative flex items-center h-full">
+                {/* Área da Linha do Tempo (Gantt Track) com 2 Níveis: Blocos Sequenciais no Topo e Marcos Temporais Embaixo */}
+                <div className="flex-1 relative flex flex-col justify-start pt-2 px-0 h-full overflow-hidden">
                   {/* Badge de Navios com Operação Projetada para Além do Horizonte Visível */}
                   {(() => {
                     const blocks = navio.blocos || [];
@@ -981,195 +1093,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                     );
                   })()}
 
-                  {navio.blocos && navio.blocos.length > 0 ? (
-                    navio.blocos.map((bloco, bIdx) => {
-                      const bStartMs = parseDateToMs(bloco.inicioIso);
-                      const bEndMs = parseDateToMs(bloco.fimIso);
-                      if (isNaN(bStartMs) || isNaN(bEndMs)) return null;
-
-                      // Não renderiza se o bloco estiver completamente fora da escala selecionada
-                      if (bEndMs <= timelineStart.getTime() || bStartMs >= timelineEnd.getTime()) {
-                        return null;
-                      }
-
-                      const leftPct = Math.max(0, Math.min(100, ((bStartMs - timelineStart.getTime()) / totalMs) * 100));
-                      const rightPct = Math.max(0, Math.min(100, ((bEndMs - timelineStart.getTime()) / totalMs) * 100));
-                      const widthPct = Math.max(0.4, rightPct - leftPct);
-                      const blockPx = (widthPct / 100) * trackWidthPx;
-                      const isUltraShort = blockPx < 15;
-                      const overflowsRight = bEndMs > timelineEnd.getTime();
-
-                      if (rightPct <= 0 || leftPct >= 100) return null;
-
-                      const isCaladoCritico = bloco.caladoCritico || ((navio.calado || 0) > 9.50 && (bloco.tipo === 'AZUL' || bloco.tipo === 'VERDE'));
-
-                      // Estilização semântica rigorosa conforme padronização CCO
-                      let blockStyle = '';
-                      let heightClass = 'h-10';
-                      let roundedClass = overflowsRight ? 'rounded-l-lg rounded-r-none' : 'rounded-lg';
-
-                      if (isCaladoCritico) {
-                        blockStyle = 'border-red-400 text-white shadow-lg shadow-red-950/40 ring-1 ring-red-400 font-extrabold';
-                      } else if (bloco.tipo === 'VERDE') {
-                        // Operando Real (Passado até Now)
-                        blockStyle = 'bg-emerald-600 border-emerald-300 text-white shadow-lg shadow-emerald-500/30 ring-1 ring-emerald-400';
-                        roundedClass = overflowsRight
-                          ? 'rounded-l-lg rounded-r-none'
-                          : navio.blocos?.some((b) => b.tipo === 'AZUL')
-                          ? 'rounded-l-lg'
-                          : 'rounded-lg';
-                      } else if (bloco.tipo === 'AZUL') {
-                        // Previsão de Operação / Término (Now até ETD ou Início até Fim de Cais)
-                        blockStyle = 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-600/25';
-                        roundedClass = overflowsRight
-                          ? 'rounded-r-none'
-                          : (isOperating || navio.blocos?.some((b) => b.tipo === 'LARANJA' || b.tipo === 'VERMELHO'))
-                          ? 'rounded-r-lg'
-                          : 'rounded-lg';
-                      } else if (bloco.tipo === 'VERMELHO') {
-                        // No Fundeio Real (AIS Barra)
-                        blockStyle = 'bg-rose-600 border-rose-400 text-white shadow-md shadow-rose-600/20';
-                        heightClass = 'h-8';
-                        roundedClass = overflowsRight ? 'rounded-l-lg rounded-r-none' : 'rounded-lg';
-                      } else if (bloco.tipo === 'LARANJA') {
-                        // Fundeio Previsto / Projetado (Espera até atracação)
-                        blockStyle = 'bg-amber-500 border-amber-300 text-slate-950 shadow-md shadow-amber-500/20 font-semibold';
-                        heightClass = 'h-8';
-                        roundedClass = overflowsRight ? 'rounded-l-lg rounded-r-none' : 'rounded-lg';
-                      }
-
-                      const ultraShortStyle = isUltraShort
-                        ? 'border-x-2 border-cyan-300 shadow-[0_0_8px_rgba(59,130,246,0.6)] ring-1 ring-cyan-400'
-                        : '';
-
-                      return (
-                        <div
-                          key={`block-${navio.id}-${bIdx}`}
-                          className={`absolute ${heightClass} border flex items-center justify-between px-1.5 text-xs font-bold transition-all z-10 hover:brightness-110 overflow-hidden ${roundedClass} ${blockStyle} ${ultraShortStyle}`}
-                          style={{
-                            left: `${leftPct}%`,
-                            width: `${widthPct}%`,
-                            minWidth: '10px',
-                            ...(isCaladoCritico
-                              ? {
-                                  backgroundImage: 'repeating-linear-gradient(45deg, #dc2626, #dc2626 10px, #991b1b 10px, #991b1b 20px)'
-                                }
-                              : {})
-                          }}
-                        >
-                          {/* Micro-Labels Inteligentes por Largura em Pixels e Semântica de CCO */}
-                          {isUltraShort ? null : bloco.tipo === 'VERDE' ? (
-                            /* Bloco Verde (Operando Real): Limiar cirúrgico de 70px sem truncamento */
-                            blockPx < 70 ? (
-                              <span className="font-mono font-black text-center w-full text-[10px] tracking-tight">
-                                {Number(bloco.duracaoHoras).toFixed(1)}h
-                              </span>
-                            ) : (
-                              <div className="flex items-center justify-center gap-1.5 w-full text-center whitespace-nowrap px-1">
-                                <span className="text-xs shrink-0">🟢</span>
-                                <span className="tracking-tight uppercase text-[10px] font-extrabold">Operando</span>
-                                {navio.progresso_operacao !== undefined && navio.progresso_operacao !== null && (
-                                  <>
-                                    <span className="opacity-60 text-white">•</span>
-                                    <span className="font-mono font-black text-[10px] bg-emerald-700/80 px-1 py-0.2 rounded shrink-0">
-                                      {navio.progresso_operacao.toFixed(1).replace('.', ',')}%
-                                    </span>
-                                  </>
-                                )}
-                                <span className="opacity-60 text-white">•</span>
-                                <span className="font-mono font-black text-[10px] shrink-0">{Number(bloco.duracaoHoras).toFixed(1)}h</span>
-                              </div>
-                            )
-                          ) : (bloco.tipo === 'LARANJA' || bloco.tipo === 'VERMELHO') ? (
-                            /* Blocos de Fundeio (Real ou Previsto): Rótulo unificado centralizado com recuo de segurança */
-                            blockPx < 55 ? (
-                              <span className="font-mono font-black text-center w-full text-[10px] tracking-tight">
-                                {Number(bloco.duracaoHoras).toFixed(1)}h
-                              </span>
-                            ) : blockPx < 110 ? (
-                              <div className={`flex items-center justify-center gap-1 w-full text-center whitespace-nowrap px-3 overflow-hidden ${overflowsRight ? 'pr-8' : ''}`}>
-                                <span className="tracking-tight uppercase text-[9.5px] font-bold">
-                                  {bloco.tipo === 'VERMELHO' ? 'Fundeio' : 'Fundeio'}
-                                </span>
-                                <span className="opacity-60 text-white">•</span>
-                                <span className="font-mono font-black text-[9.5px] shrink-0">{Number(bloco.duracaoHoras).toFixed(1)}h</span>
-                              </div>
-                            ) : (
-                              <div className={`flex items-center justify-center gap-1.5 w-full text-center px-3 whitespace-nowrap overflow-hidden ${overflowsRight ? 'pr-8' : ''}`}>
-                                <span className="shrink-0 text-xs">
-                                  {bloco.tipo === 'VERMELHO' ? '🔴' : '🟠'}
-                                </span>
-                                <span className="tracking-tight uppercase text-[10.5px] font-bold">
-                                  {bloco.tipo === 'VERMELHO' ? 'Fundeio Real' : 'Fundeio Previsto'}
-                                </span>
-                                <span className="opacity-60 text-white">•</span>
-                                <span className="font-mono font-black shrink-0 text-[10.5px]">{Number(bloco.duracaoHoras).toFixed(1)}h</span>
-                              </div>
-                            )
-                          ) : blockPx < 50 ? (
-                            /* Largura Compacta (< 50px) para Azul/Restrito: Apenas número */
-                            <span className="font-mono font-black text-center w-full text-[10px] tracking-tight">
-                              {Number(bloco.duracaoHoras).toFixed(1)}h
-                            </span>
-                          ) : blockPx < 115 ? (
-                            /* Largura Média Curta (50px a 115px) para Azul/Restrito */
-                            <div className={`flex items-center justify-center gap-1 w-full px-2 text-[10px] font-bold whitespace-nowrap overflow-hidden ${overflowsRight ? 'pr-8' : ''}`}>
-                              <span className="tracking-tight uppercase">
-                                {isCaladoCritico
-                                  ? 'RESTRITO'
-                                  : isOperating
-                                  ? 'TÉRMINO'
-                                  : 'OPERAÇÃO'}
-                              </span>
-                              <span className="opacity-60 text-white">•</span>
-                              <span className="font-mono font-black shrink-0">{Number(bloco.duracaoHoras).toFixed(1)}h</span>
-                            </div>
-                          ) : (
-                            /* Largura Ampla para Azul/Restrito: Rótulo compacto sem reticências */
-                            <div className={`flex items-center justify-center gap-1.5 w-full px-3 text-center whitespace-nowrap overflow-hidden ${overflowsRight ? 'pr-8' : ''}`}>
-                              <span className="shrink-0 text-xs">
-                                {isCaladoCritico ? '⚠️' : '🔵'}
-                              </span>
-                              <span className="tracking-tight uppercase text-[10.5px] font-bold">
-                                {isCaladoCritico
-                                  ? `[RESTRITO >9.5m]`
-                                  : isOperating
-                                  ? `Término ${navio.nome_navio}`
-                                  : `Operação`}
-                              </span>
-                              <span className="opacity-60 text-white shrink-0">•</span>
-                              <span className="font-mono font-black shrink-0 text-[10.5px]">{Number(bloco.duracaoHoras).toFixed(1)}h</span>
-                              {navio.horas_chuva && navio.horas_chuva > 0 ? (
-                                <span className="bg-sky-900/60 text-sky-200 border border-sky-400/40 text-[9px] px-1.5 py-0.5 rounded flex items-center space-x-1 font-mono shrink-0 ml-1">
-                                  <CloudRain className="w-2.5 h-2.5 text-sky-300" />
-                                  <span>+{navio.horas_chuva}h</span>
-                                </span>
-                              ) : null}
-                              {navio.restricao_mare?.temRestricao && !isCaladoCritico && (
-                                <span
-                                  className="bg-amber-950/85 text-amber-300 border border-amber-400/50 text-[9px] px-1.5 py-0.2 rounded flex items-center space-x-0.5 font-mono font-bold shrink-0 animate-pulse ml-1"
-                                  title={navio.restricao_mare.resumoAlerta}
-                                >
-                                  <span>🌊⚠️</span>
-                                  <span>Maré</span>
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Indicador de Continuidade para Barras que Sangram a Borda da Escala */}
-                          {overflowsRight && (
-                            <span
-                              className="absolute right-2 top-1/2 -translate-y-1/2 font-black text-[11px] text-white/95 drop-shadow-md pointer-events-none select-none tracking-tighter"
-                              title="Continua além da escala visível"
-                            >
-                              ❯❯
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })
-                  ) : null}
+                  {renderVesselBlocksAndMilestones(navio)}
                 </div>
               </div>
             );

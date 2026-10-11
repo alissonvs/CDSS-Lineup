@@ -1,7 +1,22 @@
 export type StatusCor = 'LARANJA' | 'VERMELHO' | 'CINZA' | 'VERDE' | 'AZUL';
 
+export type TipoTimelineBlock =
+  | 'PREVISTO_FUNDEIO'
+  | 'FUNDEADO_OPERACAO'
+  | 'OPERACAO_DESATRACACAO'
+  | 'VERDE'
+  | 'AZUL'
+  | 'VERMELHO'
+  | 'LARANJA';
+
+export interface MilestoneMarker {
+  id: 'previsaoSisport' | 'fundeio' | 'inicioOperacao' | 'desatracacao';
+  label: string;
+  dataIso: string;
+}
+
 export interface TimelineBlock {
-  tipo: 'VERDE' | 'AZUL' | 'VERMELHO' | 'LARANJA';
+  tipo: TipoTimelineBlock;
   label: string;
   inicioIso: string;
   fimIso: string;
@@ -42,6 +57,7 @@ export interface NavioLineup {
   horas_chuva?: number;
   delta_t_manobra?: number;
   blocos?: TimelineBlock[];
+  marcos?: MilestoneMarker[];
   restricao_mare?: RestricaoMareNavio;
 }
 
