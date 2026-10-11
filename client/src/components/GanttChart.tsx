@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type {
   NavioLineup,
   ResumoOperacional,
-  MaresResponse
+  MaresResponse,
+  MilestoneMarker
 } from '../types';
 import {
   Ship,
@@ -32,6 +33,13 @@ export const isCargaSensivelChuva = (mercadoria?: string): boolean => {
   );
 };
 
+interface HoveredMarcoInfo {
+  navio: NavioLineup;
+  marco: MilestoneMarker;
+  x: number;
+  y: number;
+}
+
 interface GanttChartProps {
   navios: NavioLineup[];
   operacional: ResumoOperacional | null;
@@ -51,6 +59,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 }) => {
   const { isDark } = useTheme();
   const [hoveredNavio, setHoveredNavio] = useState<NavioLineup | null>(null);
+  const [hoveredMarco, setHoveredMarco] = useState<HoveredMarcoInfo | null>(null);
 
   // Escala Temporal Selecionada (7D / 14D / 28D) controlada pelo CCO Header
   const currentScale = scaleDays ?? 7;
@@ -217,17 +226,18 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     }
   };
 
-  const formatarDataHoraMarco = (dateStr?: string | null): string => {
-    if (!dateStr) return '';
+  const formatarDataHoraCompleta = (dateStr?: string | null): string => {
+    if (!dateStr) return '-';
     const ms = parseDateToMs(dateStr);
-    if (isNaN(ms)) return '';
+    if (isNaN(ms)) return dateStr;
     const d = new Date(ms);
     const dia = d.getDate().toString().padStart(2, '0');
     const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const mes = meses[d.getMonth()];
+    const ano = d.getFullYear();
     const hora = d.getHours().toString().padStart(2, '0');
     const min = d.getMinutes().toString().padStart(2, '0');
-    return `${dia}/${mes} ${hora}:${min}`;
+    return `${dia}/${mes}/${ano} às ${hora}:${min} BRT`;
   };
 
   const renderVesselBlocksAndMilestones = (navio: NavioLineup) => {
@@ -343,39 +353,47 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           ) : null}
         </div>
 
-        {/* NÍVEL 2: Os 4 Marcos com Setas (▲) e Datas Explicitas (Conforme Esboço) */}
-        <div className="relative h-16 w-full mt-1.5 pointer-events-none">
-          {navio.marcos && navio.marcos.map((marco, marcoIdx) => {
+        {/* NÍVEL 2: Setas Interativas dos Marcos (▲) com Tooltip Rico no Hover */}
+        <div className="relative h-5 w-full mt-0.5">
+          {navio.marcos && navio.marcos.map((marco) => {
             const mMs = parseDateToMs(marco.dataIso);
             if (isNaN(mMs)) return null;
 
             const mPct = ((mMs - timelineStart.getTime()) / totalMs) * 100;
-            if (mPct < -5 || mPct > 105) return null;
+            if (mPct < -2 || mPct > 102) return null;
 
-            const prevMarco = marcoIdx > 0 && navio.marcos ? navio.marcos[marcoIdx - 1] : null;
-            const prevMs = prevMarco ? parseDateToMs(prevMarco.dataIso) : NaN;
-            const prevPct = !isNaN(prevMs) ? ((prevMs - timelineStart.getTime()) / totalMs) * 100 : -999;
-            const isTooClose = Math.abs(mPct - prevPct) < 5.5;
-            const isStaggered = (marco.id === 'fundeio' || marco.id === 'desatracacao') && isTooClose;
-
-            const dataFmt = formatarDataHoraMarco(marco.dataIso);
-            const icon = marco.id === 'fundeio' ? '⚓ ' : marco.id === 'inicioOperacao' ? '⚙ ' : '';
+            const colorClass =
+              marco.id === 'previsaoSisport'
+                ? 'text-amber-500 hover:text-amber-300 hover:drop-shadow-[0_0_8px_rgba(245,158,11,0.9)]'
+                : marco.id === 'fundeio'
+                ? 'text-rose-500 hover:text-rose-300 hover:drop-shadow-[0_0_8px_rgba(244,63,94,0.9)]'
+                : marco.id === 'inicioOperacao'
+                ? 'text-emerald-500 hover:text-emerald-300 hover:drop-shadow-[0_0_8px_rgba(16,185,129,0.9)]'
+                : 'text-cyan-400 hover:text-cyan-200 hover:drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]';
 
             return (
               <div
                 key={`marco-${navio.id}-${marco.id}`}
-                className="absolute -translate-x-1/2 flex flex-col items-center pointer-events-none select-none z-10 transition-all drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]"
+                data-testid={`milestone-arrow-${marco.id}`}
+                className="milestone-arrow absolute -translate-x-1/2 flex items-center justify-center w-6 h-6 pointer-events-auto cursor-pointer z-30 transition-transform duration-150 hover:scale-135"
                 style={{
                   left: `${Math.max(0, Math.min(100, mPct))}%`,
-                  top: isStaggered ? '20px' : '0px'
+                  top: '-2px'
                 }}
+                title={`${marco.label}: ${formatarDataHoraCompleta(marco.dataIso)}`}
+                onMouseEnter={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setHoveredMarco({
+                    navio,
+                    marco,
+                    x: rect.left + rect.width / 2,
+                    y: rect.top
+                  });
+                }}
+                onMouseLeave={() => setHoveredMarco(null)}
               >
-                <span className="text-xs text-slate-400 dark:text-slate-300 leading-none">▲</span>
-                <span className="text-[11px] font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap leading-tight mt-0.5 tracking-tight">
-                  {icon}{marco.label}
-                </span>
-                <span className="text-[10px] font-bold font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap leading-tight">
-                  ({dataFmt})
+                <span className={`text-[14px] leading-none select-none drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${colorClass}`}>
+                  ▲
                 </span>
               </div>
             );
@@ -761,7 +779,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             return (
               <div
                 key={navio.id || navio.imo}
-                className="flex h-32 relative hover:bg-slate-50 dark:hover:bg-cco-hover/30 transition-colors group z-10 hover:z-40 border-b border-slate-200/80 dark:border-cco-border/30"
+                className="flex h-24 relative hover:bg-slate-50 dark:hover:bg-cco-hover/30 transition-colors group z-10 hover:z-40 border-b border-slate-200/80 dark:border-cco-border/30"
               >
                 {/* Coluna Y-Axis fixa com detalhes da embarcação fiel ao esboço */}
                 <div
@@ -1048,8 +1066,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   )}
                 </div>
 
-                {/* Área da Linha do Tempo (Gantt Track) com 2 Níveis: Blocos Sequenciais no Topo e Marcos Temporais Embaixo */}
-                <div className="flex-1 relative flex flex-col justify-start pt-2 px-0 h-full overflow-hidden">
+                {/* Área da Linha do Tempo (Gantt Track) com 2 Níveis: Blocos Sequenciais no Topo e Setas Interativas Embaixo */}
+                <div className="flex-1 relative flex flex-col justify-center px-0 h-full overflow-hidden">
                   {/* Badge de Navios com Operação Projetada para Além do Horizonte Visível */}
                   {(() => {
                     const blocks = navio.blocos || [];
@@ -1213,6 +1231,88 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Tooltip Rico Flutuante dos Marcos Temporais ao Passar o Mouse na Seta */}
+      {hoveredMarco && (() => {
+        const isNearTop = hoveredMarco.y < 190;
+        return (
+          <div
+            className={`fixed z-[100] pointer-events-none transform -translate-x-1/2 transition-all duration-75 ${
+              isNearTop ? 'mt-2' : '-translate-y-full mb-2'
+            }`}
+            style={{
+              left: `${Math.max(130, Math.min(window.innerWidth - 130, hoveredMarco.x))}px`,
+              top: `${isNearTop ? hoveredMarco.y + 22 : hoveredMarco.y - 6}px`
+            }}
+          >
+            <div className="bg-slate-900/98 dark:bg-[#0b1322]/98 text-white border border-slate-700/80 dark:border-slate-600/80 rounded-xl p-3 shadow-2xl backdrop-blur-md min-w-[240px] max-w-sm ring-1 ring-white/10 animate-in fade-in zoom-in-95 duration-150">
+              {/* Seta do tooltip */}
+              {isNearTop ? (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-[1px] border-[6px] border-transparent border-b-slate-900/98 dark:border-b-[#0b1322]/98" />
+              ) : (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-[1px] border-[6px] border-transparent border-t-slate-900/98 dark:border-t-[#0b1322]/98" />
+              )}
+
+              {/* Cabeçalho do Marco com Ícone e Cor correspondente */}
+              <div className="flex items-center space-x-2 pb-2 border-b border-slate-800 dark:border-slate-700/70">
+              <span className="text-base leading-none">
+                {hoveredMarco.marco.id === 'previsaoSisport'
+                  ? '🗓️'
+                  : hoveredMarco.marco.id === 'fundeio'
+                  ? '⚓'
+                  : hoveredMarco.marco.id === 'inicioOperacao'
+                  ? '⚙️'
+                  : '🏁'}
+              </span>
+              <div className="min-w-0 flex-1">
+                <span className="font-black text-xs text-white block truncate tracking-tight">
+                  {hoveredMarco.marco.label}
+                </span>
+                <span className="text-[10px] text-slate-400 block truncate">
+                  {hoveredMarco.navio.nome_navio} ({hoveredMarco.navio.ordem_fila}º da fila)
+                </span>
+              </div>
+            </div>
+
+            {/* Data e Horário Formatados em Destaque */}
+            <div className="mt-2.5 bg-slate-950/80 rounded-lg p-2 border border-slate-800 flex items-center justify-between">
+              <span className="text-[10.5px] text-slate-400 font-medium">Data & Horário:</span>
+              <span className="text-xs font-mono font-bold text-cyan-300">
+                {formatarDataHoraCompleta(hoveredMarco.marco.dataIso)}
+              </span>
+            </div>
+
+            {/* Contexto Operacional Específico do Marco */}
+            <div className="mt-2 text-[10px] text-slate-300 leading-relaxed space-y-0.5">
+              {hoveredMarco.marco.id === 'previsaoSisport' && (
+                <p className="text-amber-300/90 flex items-center space-x-1">
+                  <span>•</span>
+                  <span>Previsão oficial estimada registrada no SISPORT</span>
+                </p>
+              )}
+              {hoveredMarco.marco.id === 'fundeio' && (
+                <p className="text-rose-300/90 flex items-center space-x-1">
+                  <span>•</span>
+                  <span>Chegada confirmada / Entrada em espera na barra</span>
+                </p>
+              )}
+              {hoveredMarco.marco.id === 'inicioOperacao' && (
+                <p className="text-emerald-300/90 flex items-center space-x-1">
+                  <span>•</span>
+                  <span>Atracação e início da operação de carga no berço</span>
+                </p>
+              )}
+              {hoveredMarco.marco.id === 'desatracacao' && (
+                <p className="text-cyan-300/90 flex items-center space-x-1">
+                  <span>•</span>
+                  <span>Término da operação e desatracação estimada</span>
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    })()}
     </div>
   );
 };
