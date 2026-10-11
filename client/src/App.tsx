@@ -308,6 +308,7 @@ export const App: React.FC = () => {
             mares={mares}
             scaleDays={scaleDays}
             onScaleChange={setScaleDays}
+            onSelectNavio={(navio) => setNavioDetalhesGantt(navio)}
           />
         )}
 

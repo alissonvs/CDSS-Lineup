@@ -167,6 +167,11 @@ export async function initializeDatabase(): Promise<void> {
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS sinal_antena TEXT`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS ais_sincronizado_em TEXT`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS progresso_operacao DOUBLE PRECISION`;
+    await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS origem_previsao_fim TEXT DEFAULT 'CALCULADO'`;
+    await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS manobra_praticagem_id INTEGER`;
+    await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS manobra_praticagem_str TEXT`;
+    await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS ajuste_praticagem_ativo INTEGER DEFAULT 1`;
+
 
     // Regra: se inicio_operacao estiver vazio, preenche inicialmente com as informações de data e hora do AIS (eta_ais)
     await sql`

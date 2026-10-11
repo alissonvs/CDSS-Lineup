@@ -323,6 +323,20 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                         ⚓ FUNDEADO
                       </span>
                     )
+                  ) : navio.origem_previsao_fim === 'PRATICAGEM' ? (
+                    blockPx >= 140 ? (
+                      <span className="tracking-tight text-xs font-black whitespace-nowrap text-center flex items-center justify-center space-x-1" title={navio.manobra_praticagem_str || 'Desatracação confirmada pela Praticagem'}>
+                        <span>⚙ OP ➔ ⚓ DESATRAC. (PRATICAGEM)</span>
+                      </span>
+                    ) : blockPx >= 70 ? (
+                      <span className="tracking-tight text-[10px] font-extrabold truncate text-center w-full" title={navio.manobra_praticagem_str || 'Desatracação confirmada pela Praticagem'}>
+                        ⚓ OP ➔ PRATICAGEM
+                      </span>
+                    ) : (
+                      <span className="tracking-tight text-[9.5px] font-extrabold text-center w-full truncate" title={navio.manobra_praticagem_str || 'Desatracação confirmada pela Praticagem'}>
+                        ⚓ PRAT.
+                      </span>
+                    )
                   ) : (
                     blockPx >= 140 ? (
                       <span className="tracking-tight text-xs font-black whitespace-nowrap text-center">
@@ -380,7 +394,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   left: `${Math.max(0, Math.min(100, mPct))}%`,
                   top: '-2px'
                 }}
-                title={`${marco.label}: ${formatarDataHoraCompleta(marco.dataIso)}`}
+                title={
+                  marco.id === 'desatracacao' && navio.origem_previsao_fim === 'PRATICAGEM'
+                    ? `Prevista Desatracação (Confirmada Praticagem): ${formatarDataHoraCompleta(marco.dataIso)}`
+                    : `${marco.label}: ${formatarDataHoraCompleta(marco.dataIso)}`
+                }
                 onMouseEnter={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   setHoveredMarco({
@@ -785,8 +803,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 <div
                   onMouseEnter={() => setHoveredNavio(navio)}
                   onMouseLeave={() => setHoveredNavio(null)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-[26.5rem] min-w-[26.5rem] px-4 py-2 bg-white/95 dark:bg-cco-panel/95 border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-20 group-hover:bg-slate-50 dark:group-hover:bg-cco-panel transition-colors relative cursor-default"
+                  onClick={() => onSelectNavio?.(navio)}
+                  className="w-[26.5rem] min-w-[26.5rem] px-4 py-2 bg-white/95 dark:bg-cco-panel/95 border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-20 group-hover:bg-slate-50 dark:group-hover:bg-cco-panel transition-colors relative cursor-pointer"
                 >
                   <div className="flex items-center space-x-3 overflow-hidden flex-1 min-w-0">
                     {/* Badge da ordem na fila */}
@@ -862,8 +880,19 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                         <span className="text-slate-500 dark:text-slate-400">IMO {navio.imo}</span>
                       </div>
 
-                      {/* Linha 3: Status da Telemetria AIS ou Alerta de Maré/Divergência */}
-                      <div className="min-w-0 flex items-center">
+                      {/* Linha 3: Status da Telemetria AIS ou Alerta de Maré/Divergência / Praticagem */}
+                      <div className="min-w-0 flex items-center space-x-1 overflow-hidden">
+                        {navio.manobra_praticagem_str && (
+                          <span
+                            title={`Praticagem de São Sebastião:\n${navio.manobra_praticagem_str}`}
+                            className="text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-1 shrink-0 cursor-help border bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-500/40 font-bold max-w-full truncate"
+                          >
+                            <span>⚓</span>
+                            <span className="truncate">
+                              {navio.origem_previsao_fim === 'PRATICAGEM' ? 'Saída Praticagem' : 'Praticagem'}
+                            </span>
+                          </span>
+                        )}
                         {navio.restricao_mare?.temRestricao ? (
                           <span
                             title={`Alerta de Restrição de Calado & Maré (DHN):\n${navio.restricao_mare.resumoAlerta}\nCalado do Navio: ${navio.calado}m | Profundidade Berço (ZH): ${navio.restricao_mare.profundidadeBercoZh}m\nAtracação: ${navio.restricao_mare.atracacao ? `Maré ${navio.restricao_mare.atracacao.alturaMare.toFixed(2)}m (UKC ${navio.restricao_mare.atracacao.ukcCalculado.toFixed(2)}m)` : 'N/A'}\nRecomendação: Aguardar Preamar para manobra`}
@@ -1303,10 +1332,23 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 </p>
               )}
               {hoveredMarco.marco.id === 'desatracacao' && (
-                <p className="text-cyan-300/90 flex items-center space-x-1">
-                  <span>•</span>
-                  <span>Término da operação e desatracação estimada</span>
-                </p>
+                hoveredMarco.navio.origem_previsao_fim === 'PRATICAGEM' ? (
+                  <p className="text-purple-300 font-bold flex items-center space-x-1">
+                    <span>⚓</span>
+                    <span>Desatracação confirmada pela Praticagem de SP</span>
+                  </p>
+                ) : (
+                  <p className="text-cyan-300/90 flex items-center space-x-1">
+                    <span>•</span>
+                    <span>Término da operação e desatracação estimada (PMD)</span>
+                  </p>
+                )
+              )}
+              {hoveredMarco.navio.manobra_praticagem_str && (
+                <div className="text-purple-300/95 text-[9.5px] border-t border-slate-800 pt-1.5 mt-1 font-mono flex items-start space-x-1">
+                  <span>⚓</span>
+                  <span>{hoveredMarco.navio.manobra_praticagem_str}</span>
+                </div>
               )}
             </div>
           </div>

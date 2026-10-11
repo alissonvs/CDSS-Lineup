@@ -235,6 +235,8 @@ export async function updateNavioHandler(req: Request, res: Response): Promise<v
         sinal_antena = ${(body.sinal_antena !== undefined ? body.sinal_antena : (existing.sinal_antena || null)) ?? null},
         ais_sincronizado_em = ${(body.ais_sincronizado_em !== undefined ? body.ais_sincronizado_em : (existing.ais_sincronizado_em || null)) ?? null},
         progresso_operacao = ${(body.progresso_operacao !== undefined ? body.progresso_operacao : (existing.progresso_operacao ?? null)) ?? null},
+        ajuste_praticagem_ativo = ${body.ajuste_praticagem_ativo !== undefined ? (body.ajuste_praticagem_ativo ? 1 : 0) : (existing.ajuste_praticagem_ativo ?? 1)},
+        origem_previsao_fim = ${(body.origem_previsao_fim !== undefined ? body.origem_previsao_fim : (body.fim_atracacao && body.fim_atracacao !== existing.fim_atracacao ? 'MANUAL' : (existing.origem_previsao_fim || 'CALCULADO')))},
         ultima_atualizacao = CURRENT_TIMESTAMP
       WHERE id = ${id}
     `;

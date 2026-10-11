@@ -123,6 +123,71 @@ export async function recalcularLineupComMotor(): Promise<{
 
   const pranchas = await obterPranchas();
 
+  // 0. Carregar manobras e resumo de tráfego da Praticagem de São Sebastião (SP Pilots)
+  let praticagemManobras: any[] = [];
+  let praticagemResumo: any[] = [];
+  try {
+    praticagemManobras = await sql`
+      SELECT id, sp_manobra_id, categoria, categoria_label, cor_fundo, nome_navio, imo,
+             tipo_manobra, local_origem, local_destino, horario_str, horario_iso,
+             vinculo_lineup_imo
+      FROM praticagem_manobras
+      ORDER BY id ASC
+    `;
+    praticagemResumo = await sql`
+      SELECT tipo, navio, berco, data_hora_str, data_hora_iso, vinculo_lineup_imo
+      FROM praticagem_resumo_porto
+    `;
+  } catch (errPrat) {
+    console.warn('[Engine] Aviso ao carregar tabelas da Praticagem:', errPrat);
+  }
+
+  // Funções utilitárias de correlação com a Praticagem
+  const normalizarNome = (s?: string | null) => (s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+
+  const getManobrasNavio = (n: NavioLineup) => {
+    const nomeN = normalizarNome(n.nome_navio);
+    return praticagemManobras.filter((m) => {
+      const matchImo = (m.vinculo_lineup_imo && m.vinculo_lineup_imo === n.imo) || (m.imo && m.imo === n.imo);
+      if (matchImo) return true;
+      const nomeM = normalizarNome(m.nome_navio);
+      return nomeN.length >= 4 && (nomeN === nomeM || nomeM.includes(nomeN) || nomeN.includes(nomeM));
+    });
+  };
+
+  const getResumoNavio = (n: NavioLineup) => {
+    const nomeN = normalizarNome(n.nome_navio);
+    return praticagemResumo.filter((r) => {
+      const matchImo = r.vinculo_lineup_imo && r.vinculo_lineup_imo === n.imo;
+      if (matchImo) return true;
+      const nomeR = normalizarNome(r.navio);
+      return nomeN.length >= 4 && (nomeN === nomeR || nomeR.includes(nomeN) || nomeN.includes(nomeR));
+    });
+  };
+
+  // Identifica se um navio tem manobra de entrada agendada especificamente para o CAIS comercial
+  const getManobraEntradaCais = (n: NavioLineup) => {
+    const mbs = getManobrasNavio(n);
+    return mbs.find((m) => {
+      if (m.categoria === 'CANCELADAS') return false;
+      const ehEntrada = m.tipo_manobra === 'E';
+      const ehMudancaCais = m.tipo_manobra === 'M' && (m.local_destino || '').toUpperCase().includes('CAIS');
+      const entraNoCais = (m.local_origem || '').toUpperCase().includes('CAIS') || (m.local_destino || '').toUpperCase().includes('CAIS');
+      return (ehEntrada && entraNoCais) || ehMudancaCais;
+    });
+  };
+
+  // Identifica manobra de saída (desatracação) do CAIS comercial
+  const getManobraSaidaCais = (n: NavioLineup) => {
+    const mbs = getManobrasNavio(n);
+    return mbs.find((m) => {
+      if (m.categoria === 'CANCELADAS') return false;
+      const ehSaida = m.tipo_manobra === 'S';
+      const saiDoCais = !m.local_origem || (m.local_origem || '').toUpperCase().includes('CAIS');
+      return ehSaida && saiDoCais;
+    });
+  };
+
   // Momento de referência do sistema: Data/hora atual em tempo real
   const agora = new Date();
   const nowMs = agora.getTime();
@@ -136,8 +201,21 @@ export async function recalcularLineupComMotor(): Promise<{
     .filter((n) => !navioVerde || n.id !== navioVerde.id);
 
   // Ordenação inteligente da fila de espera para evitar ociosidade no cais:
-  // Navios prontos/disponíveis no porto (ETA <= agora ou fundeados) têm precedência para ocupar o cais liberado
+  // Navios com manobra de entrada no CAIS agendada na Praticagem têm prioridade absoluta de berço!
   naviosFila.sort((a, b) => {
+    // 1. Prioridade operacional para navio com manobra de entrada no CAIS na Praticagem
+    const mEntradaA = (a.ajuste_praticagem_ativo ?? 1) !== 0 ? getManobraEntradaCais(a) : null;
+    const mEntradaB = (b.ajuste_praticagem_ativo ?? 1) !== 0 ? getManobraEntradaCais(b) : null;
+
+    if (mEntradaA && !mEntradaB) return -1;
+    if (!mEntradaA && mEntradaB) return 1;
+    if (mEntradaA && mEntradaB) {
+      const tA = parseDateIso(mEntradaA.horario_iso)?.getTime() || 0;
+      const tB = parseDateIso(mEntradaB.horario_iso)?.getTime() || 0;
+      if (tA !== tB) return tA - tB;
+    }
+
+    // 2. Navios prontos/disponíveis no porto (ETA <= agora ou fundeados) têm precedência
     const etaA = parseDateIso(a.chegada_fundeio || a.eta_previsto)?.getTime() || nowMs;
     const etaB = parseDateIso(b.chegada_fundeio || b.eta_previsto)?.getTime() || nowMs;
 
@@ -178,10 +256,23 @@ export async function recalcularLineupComMotor(): Promise<{
     const horasJaOperadasMs = 12 * 3600 * 1000;
     let berthedAtMs = nowMs - horasJaOperadasMs;
 
+    // Manobra de atracação na Praticagem (M ou E)
+    const manobrasVerde = getManobrasNavio(navio);
+    const manobraAtracacaoVerde = manobrasVerde.find(
+      (m) => (m.tipo_manobra === 'M' || m.tipo_manobra === 'E') &&
+             ((m.local_destino || '').toUpperCase().includes('CAIS') || (m.local_origem || '').toUpperCase().includes('CAIS'))
+    );
+    const manobraSaidaVerde = getManobraSaidaCais(navio);
+
     if (navio.inicio_operacao) {
       const parsedInicioOp = parseDateIso(navio.inicio_operacao);
       if (parsedInicioOp) {
         berthedAtMs = parsedInicioOp.getTime();
+      }
+    } else if (manobraAtracacaoVerde && manobraAtracacaoVerde.horario_iso) {
+      const parsedPrat = parseDateIso(manobraAtracacaoVerde.horario_iso);
+      if (parsedPrat) {
+        berthedAtMs = parsedPrat.getTime();
       }
     } else if (navio.inicio_atracacao) {
       const parsedInicio = parseDateIso(navio.inicio_atracacao);
@@ -198,15 +289,25 @@ export async function recalcularLineupComMotor(): Promise<{
 
     // Duração de cais projetada / Desatracação prevista
     let etdProjetadoMs: number;
-    if (navio.fim_atracacao) {
-      const parsedFim = parseDateIso(navio.fim_atracacao);
-      if (parsedFim) {
-        etdProjetadoMs = parsedFim.getTime();
+    // Se o navio tiver manobra de desatracação (S) agendada na Praticagem e o ajuste automático estiver ativo:
+    if (manobraSaidaVerde && (navio.ajuste_praticagem_ativo ?? 1) !== 0 && manobraSaidaVerde.horario_iso) {
+      const parsedSaida = parseDateIso(manobraSaidaVerde.horario_iso);
+      if (parsedSaida) {
+        etdProjetadoMs = parsedSaida.getTime();
+        navio.origem_previsao_fim = 'PRATICAGEM';
+        navio.manobra_praticagem_id = manobraSaidaVerde.id;
+        navio.manobra_praticagem_str = `Desatracação confirmada pela Praticagem em ${manobraSaidaVerde.horario_str}`;
       } else {
         etdProjetadoMs = berthedAtMs + Math.max(8, tempoTotalHoras) * 3600000;
+        navio.origem_previsao_fim = 'CALCULADO';
       }
+    } else if (navio.origem_previsao_fim === 'MANUAL' && navio.fim_atracacao) {
+      const parsedFim = parseDateIso(navio.fim_atracacao);
+      etdProjetadoMs = parsedFim ? parsedFim.getTime() : (berthedAtMs + Math.max(8, tempoTotalHoras) * 3600000);
+      navio.origem_previsao_fim = 'MANUAL';
     } else {
       etdProjetadoMs = berthedAtMs + Math.max(8, tempoTotalHoras) * 3600000;
+      navio.origem_previsao_fim = 'CALCULADO';
     }
 
     // Determinação precisa dos 4 Marcos Temporais do Navio no Berço
@@ -285,19 +386,36 @@ export async function recalcularLineupComMotor(): Promise<{
     const navio: NavioLineup = { ...n };
     totalVolumeT += navio.volume_t || 0;
 
-    // Data de prontidão do navio (Início da Operação > Chegada no Fundeio > ETA)
-    const etaD = parseDateIso(navio.chegada_fundeio || navio.eta_previsto) || agora;
-    const etaMs = etaD.getTime();
+    // Verificar se o navio consta como FUNDEADO na Praticagem
+    const resumoNavio = getResumoNavio(navio);
+    const estaFundeadoPraticagem = resumoNavio.some((r) => r.tipo === 'FUNDEADOS');
+    if (estaFundeadoPraticagem && navio.status_cor !== 'VERDE') {
+      navio.status_cor = 'VERMELHO';
+      if (!navio.chegada_fundeio) {
+        navio.chegada_fundeio = toIsoUtc(new Date(nowMs - 6 * 3600000));
+      }
+    }
 
-    // Regra do encadeamento estrito de berço único com respeito a agendamento explícito:
+    // Verificar manobra de entrada no CAIS na Praticagem
+    const manobraEntrada = (navio.ajuste_praticagem_ativo ?? 1) !== 0 ? getManobraEntradaCais(navio) : null;
+
     let inicioOperacaoMs = cursorBercoMs;
-    if (navio.inicio_operacao) {
+    if (manobraEntrada && manobraEntrada.horario_iso) {
+      const parsedPratEntrada = parseDateIso(manobraEntrada.horario_iso);
+      if (parsedPratEntrada) {
+        // Respeita a liberação física do berço pelo navio anterior (cursorBercoMs = fim do anterior + 2h)
+        inicioOperacaoMs = Math.max(cursorBercoMs, parsedPratEntrada.getTime());
+        navio.manobra_praticagem_id = manobraEntrada.id;
+        navio.manobra_praticagem_str = `Entrada agendada na Praticagem (${manobraEntrada.categoria_label}): ${manobraEntrada.horario_str}`;
+      }
+    } else if (navio.inicio_operacao) {
       const parsedOp = parseDateIso(navio.inicio_operacao);
       if (parsedOp) {
         inicioOperacaoMs = Math.max(cursorBercoMs, parsedOp.getTime());
       }
     } else {
-      inicioOperacaoMs = Math.max(cursorBercoMs, etaMs);
+      const etaD = parseDateIso(navio.chegada_fundeio || navio.eta_previsto) || agora;
+      inicioOperacaoMs = Math.max(cursorBercoMs, etaD.getTime());
     }
     const inicioOperacaoDate = new Date(inicioOperacaoMs);
 
@@ -308,15 +426,31 @@ export async function recalcularLineupComMotor(): Promise<{
     );
 
     let fimOperacaoMs: number;
-    if (navio.fim_atracacao) {
+    // Verificar se este navio na fila também possui manobra de saída (desatracação) agendada na Praticagem
+    const manobraSaida = (navio.ajuste_praticagem_ativo ?? 1) !== 0 ? getManobraSaidaCais(navio) : null;
+
+    if (manobraSaida && manobraSaida.horario_iso) {
+      const parsedSaida = parseDateIso(manobraSaida.horario_iso);
+      if (parsedSaida && parsedSaida.getTime() > inicioOperacaoMs) {
+        fimOperacaoMs = parsedSaida.getTime();
+        navio.origem_previsao_fim = 'PRATICAGEM';
+        navio.manobra_praticagem_id = manobraSaida.id;
+        navio.manobra_praticagem_str = `Saída agendada na Praticagem (${manobraSaida.categoria_label}): ${manobraSaida.horario_str}`;
+      } else {
+        fimOperacaoMs = inicioOperacaoMs + tempoTotalHoras * 3600000;
+        navio.origem_previsao_fim = 'CALCULADO';
+      }
+    } else if (navio.origem_previsao_fim === 'MANUAL' && navio.fim_atracacao) {
       const parsedFim = parseDateIso(navio.fim_atracacao);
       if (parsedFim && parsedFim.getTime() > inicioOperacaoMs) {
         fimOperacaoMs = parsedFim.getTime();
       } else {
         fimOperacaoMs = inicioOperacaoMs + tempoTotalHoras * 3600000;
+        navio.origem_previsao_fim = 'CALCULADO';
       }
     } else {
       fimOperacaoMs = inicioOperacaoMs + tempoTotalHoras * 3600000;
+      navio.origem_previsao_fim = 'CALCULADO';
     }
 
     const caladoCritico = false;
@@ -439,7 +573,11 @@ export async function recalcularLineupComMotor(): Promise<{
           ordem_fila = ${n.ordem_fila},
           status_cor = ${n.status_cor},
           inicio_atracacao = ${n.inicio_atracacao ?? null},
-          fim_atracacao = ${n.fim_atracacao ?? null}
+          fim_atracacao = ${n.fim_atracacao ?? null},
+          chegada_fundeio = ${n.chegada_fundeio ?? null},
+          origem_previsao_fim = ${n.origem_previsao_fim ?? 'CALCULADO'},
+          manobra_praticagem_id = ${n.manobra_praticagem_id ?? null},
+          manobra_praticagem_str = ${n.manobra_praticagem_str ?? null}
         WHERE id = ${n.id}
       `;
     }

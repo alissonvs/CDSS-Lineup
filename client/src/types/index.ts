@@ -59,7 +59,12 @@ export interface NavioLineup {
   blocos?: TimelineBlock[];
   marcos?: MilestoneMarker[];
   restricao_mare?: RestricaoMareNavio;
+  origem_previsao_fim?: 'CALCULADO' | 'PRATICAGEM' | 'MANUAL';
+  manobra_praticagem_id?: number | null;
+  manobra_praticagem_str?: string | null;
+  ajuste_praticagem_ativo?: number;
 }
+
 
 export type TipoExtremoMare = 'PREAMAR' | 'BAIXA_MAR';
 export type TendenciaMare = 'SUBINDO' | 'DESCENDO' | 'ESTAVEL';

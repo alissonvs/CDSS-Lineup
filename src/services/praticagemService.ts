@@ -407,6 +407,16 @@ export class PraticagemService {
       });
 
       console.log(`[Praticagem] Sincronização concluída com sucesso! ${manobrasExtraidas.length} manobras, ${aguardadosList.length} aguardados, ${fundeadosList.length} fundeados, ${atracadosList.length} atracados.`);
+
+      // 9. Atualizar automaticamente a projeção real do Line-up via Motor de Cálculo
+      try {
+        const { recalcularLineupComMotor } = await import('./engine.js');
+        await recalcularLineupComMotor();
+        console.log('[Praticagem] Motor de cálculo atualizado com sucesso após sincronização da Praticagem.');
+      } catch (errEngine) {
+        console.error('[Praticagem] Erro ao recalcular motor após sincronização da Praticagem:', errEngine);
+      }
+
       return { totalManobras: manobrasExtraidas.length, sucesso: true };
 
     } catch (error) {

@@ -53,9 +53,19 @@ export async function sincronizarTudoCdss(): Promise<SyncAllResult> {
   console.log('[SyncAll] ========================================================');
 
   // ETAPA 1: Sincronização com SISPORT Oficial + Catálogo Interno de Navios
-  console.log('[SyncAll] [1/2] Sincronizando programação oficial do SISPORT com catálogo oficial...');
+  console.log('[SyncAll] [1/3] Sincronizando programação oficial do SISPORT com catálogo oficial...');
   const sisportResult = await sincronizarComSisportOficial();
-  console.log(`[SyncAll] [1/2] ✓ SISPORT concluído. ${sisportResult.totalSincronizados} escalas importadas com IMOs oficiais.`);
+  console.log(`[SyncAll] [1/3] ✓ SISPORT concluído. ${sisportResult.totalSincronizados} escalas importadas com IMOs oficiais.`);
+
+  // ETAPA 1.5: Sincronização com a Praticagem de São Sebastião (SP Pilots)
+  try {
+    const { praticagemService } = await import('./praticagemService.js');
+    console.log('[SyncAll] [2/3] Sincronizando pauta de serviços da Praticagem de São Sebastião...');
+    await praticagemService.sincronizarPraticagem();
+    console.log('[SyncAll] [2/3] ✓ Praticagem sincronizada com sucesso.');
+  } catch (errPrat) {
+    console.warn('[SyncAll] Aviso: Falha não impeditiva na sincronização da Praticagem:', (errPrat as Error).message);
+  }
 
   const sql = getDatabase();
   const naviosDb = (await sql`SELECT * FROM lineup_navios ORDER BY ordem_fila ASC, id ASC`) as any[];

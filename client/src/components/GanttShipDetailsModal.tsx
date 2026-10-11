@@ -262,7 +262,14 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 dark:text-slate-400 block text-[10px]">TÉRMINO PREVISTO</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 dark:text-slate-400 block text-[10px]">TÉRMINO PREVISTO</span>
+                    {navio.origem_previsao_fim === 'PRATICAGEM' && (
+                      <span className="px-1.5 py-0.2 text-[9px] bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 font-bold rounded border border-purple-300 dark:border-purple-600">
+                        ⚓ Praticagem
+                      </span>
+                    )}
+                  </div>
                   <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
                     {formatDateTime(navio.fim_atracacao)}
                   </span>
@@ -325,6 +332,37 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Card de Integração da Praticagem (SP Pilots) */}
+          {navio.manobra_praticagem_str && (
+            <div className="p-3.5 rounded-xl border border-purple-200 dark:border-purple-500/40 bg-purple-50/70 dark:bg-purple-950/25 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 text-purple-800 dark:text-purple-300">
+                  <Anchor className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                    Pauta de Praticagem de São Sebastião
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded border bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/60 dark:text-purple-200 dark:border-purple-500/50">
+                  {navio.origem_previsao_fim === 'PRATICAGEM' ? 'PROJEÇÃO REAL' : 'MANOBRA AGENDADA'}
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-white dark:bg-cco-darkest/80 border border-purple-200 dark:border-purple-900/60 flex items-start space-x-2.5 text-xs">
+                <span className="text-base leading-none mt-0.5">⚓</span>
+                <div className="flex-1">
+                  <div className="font-bold text-slate-900 dark:text-slate-100">
+                    {navio.manobra_praticagem_str}
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {navio.origem_previsao_fim === 'PRATICAGEM'
+                      ? 'O horário de desatracação no Line-up está sendo ajustado em tempo real pela programação oficial da Praticagem.'
+                      : 'O horário previsto de entrada no berço foi integrado conforme a programação solicitada/confirmada na Praticagem.'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Card de Validação de Previsão: SISPORT Oficial vs Telemetria AIS */}
           {(() => {
