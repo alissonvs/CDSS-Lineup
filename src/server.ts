@@ -6,6 +6,7 @@ import fs from 'fs';
 import { initializeDatabase } from './database/init.js';
 import apiRoutes from './routes/api.js';
 import { spPilotsService } from './services/spPilotsService.js';
+import { praticagemService } from './services/praticagemService.js';
 import { APP_VERSION } from './version.js';
 
 dotenv.config();
@@ -59,13 +60,20 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`🏥 Healthcheck probe: http://${HOST}:${PORT}/api/health`);
   console.log(`🌊 Telemetria SP Pilots: http://${HOST}:${PORT}/api/weather/tide/current`);
   console.log(`🌧️ Previsão de Chuva: http://${HOST}:${PORT}/api/weather/rain/forecast`);
+  console.log(`🚢 Pauta de Praticagem: http://${HOST}:${PORT}/api/praticagem/pauta`);
   console.log(`====================================================`);
 
-  // Dispara coleta inicial imediata da telemetria da Praticagem de SP
+  // Dispara coleta inicial imediata da telemetria e da pauta de manobras da Praticagem de SP
   spPilotsService.atualizarTelemetria().then(t => {
     console.log(`[SP Pilots] Telemetria inicial capturada: ${t.alturaMetros.toFixed(2)}m (${t.tendencia}) - Fonte: ${t.fonte}`);
   }).catch(err => {
     console.warn(`[SP Pilots] Falha na coleta inicial da telemetria:`, (err as Error).message);
+  });
+
+  praticagemService.sincronizarPraticagem().then(res => {
+    console.log(`[Praticagem] Sincronização inicial concluída: ${res.totalManobras} manobras.`);
+  }).catch(err => {
+    console.warn(`[Praticagem] Falha na sincronização inicial:`, (err as Error).message);
   });
 
   // Agendador de background a cada 5 minutos (300.000 ms)
@@ -74,7 +82,12 @@ const server = app.listen(PORT, HOST, () => {
     spPilotsService.atualizarTelemetria().catch(err => {
       console.warn(`[SP Pilots Worker] Falha na atualização periódica:`, (err as Error).message);
     });
+
+    praticagemService.sincronizarPraticagem().catch(err => {
+      console.warn(`[Praticagem Worker] Falha na atualização periódica:`, (err as Error).message);
+    });
   }, INTERVALO_COLETA_MS);
+
 
   // Graceful Shutdown (Encerramento gracioso ao receber SIGTERM ou SIGINT no Docker/Dokploy)
   const shutdown = (signal: string) => {

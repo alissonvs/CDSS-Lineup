@@ -91,6 +91,64 @@ export async function initializeDatabase(): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS idx_navios_nome ON navios (UPPER(nome))`;
   await sql`CREATE INDEX IF NOT EXISTS idx_navios_imo ON navios (imo)`;
 
+  // Tabelas da Praticagem de São Sebastião (SP Pilots)
+  await sql`
+    CREATE TABLE IF NOT EXISTS praticagem_manobras (
+        id SERIAL PRIMARY KEY,
+        sp_manobra_id INTEGER,
+        categoria TEXT NOT NULL,                         -- 'ENCERRADAS', 'EM_ANDAMENTO', 'CONFIRMADAS', 'CONFIRMADAS_AGENTE', 'SOLICITADAS'
+        categoria_label TEXT NOT NULL,                   -- 'Manobras Encerradas', 'Manobras em Andamento', etc.
+        cor_fundo TEXT,                                  -- Hexadecimal original (#ff4a4a, #D1A2F9, etc.)
+        nome_navio TEXT NOT NULL,
+        imo TEXT,
+        tipo_manobra TEXT NOT NULL,                      -- 'E', 'S', 'M'
+        local_origem TEXT,
+        local_destino TEXT,
+        horario_str TEXT NOT NULL,                       -- '11/10 04:30'
+        horario_iso TEXT,                                -- '2026-10-11T04:30:00-03:00'
+        indicadores JSONB DEFAULT '[]'::jsonb,
+        agente TEXT,
+        calado DOUBLE PRECISION,
+        bordo TEXT,
+        rebocador TEXT,
+        observacoes TEXT,
+        detalhes_navio JSONB,
+        vinculo_lineup_imo TEXT,                         -- IMO correspondente no Line-up CDSS se existir
+        atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_praticagem_manobras_categoria ON praticagem_manobras(categoria)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_praticagem_manobras_navio ON praticagem_manobras(UPPER(nome_navio))`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_praticagem_manobras_imo ON praticagem_manobras(imo)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS praticagem_resumo_porto (
+        id SERIAL PRIMARY KEY,
+        tipo TEXT NOT NULL,                              -- 'AGUARDADOS', 'FUNDEADOS', 'ATRACADOS'
+        navio TEXT NOT NULL,
+        berco TEXT,                                      -- 'P1', 'P2', 'P3', 'CAIS'
+        data_hora_str TEXT,                              -- '12/10 06:00'
+        data_hora_iso TEXT,
+        ordem INTEGER DEFAULT 0,
+        vinculo_lineup_imo TEXT,
+        atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_praticagem_resumo_tipo ON praticagem_resumo_porto(tipo)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS praticagem_sync_status (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        ultima_sincronizacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        status TEXT NOT NULL,                            -- 'SUCESSO', 'ERRO'
+        total_manobras INTEGER DEFAULT 0,
+        total_aguardados INTEGER DEFAULT 0,
+        total_fundeados INTEGER DEFAULT 0,
+        total_atracados INTEGER DEFAULT 0,
+        mensagem_erro TEXT
+    );
+  `;
+
   // Popula catálogo de navios caso a tabela esteja vazia
   const [{ count: countCatalogoNavios }] = await sql`SELECT COUNT(*)::int as count FROM navios`;
   if (countCatalogoNavios === 0) {

@@ -16,6 +16,10 @@ import {
   getCurrentTideHandler,
   getRainForecastHandler
 } from '../controllers/lineupController.js';
+import {
+  getPautaPraticagemHandler,
+  syncPraticagemHandler
+} from '../controllers/praticagemController.js';
 import { APP_VERSION } from '../version.js';
 
 const router = Router();
@@ -36,6 +40,10 @@ router.post('/sisport/sync', syncSisportHandler);
 router.post('/sisport/sync-all', syncAllHandler);
 router.get('/navios/search', searchNavioCatalogoHandler);
 
+// Praticagem de São Sebastião (SP Pilots)
+router.get('/praticagem/pauta', getPautaPraticagemHandler);
+router.post('/praticagem/sync', syncPraticagemHandler);
+
 // Operação, Clima e Tábua de Marés
 router.get('/operacional/resumo', getResumoOperacionalHandler);
 router.get('/financeiro/resumo', getResumoOperacionalHandler); // Rota legada de resumo
@@ -45,3 +53,4 @@ router.get('/weather/tide/current', getCurrentTideHandler);
 router.get('/weather/rain/forecast', getRainForecastHandler);
 
 export default router;
+

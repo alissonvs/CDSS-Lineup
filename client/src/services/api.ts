@@ -5,8 +5,10 @@ import type {
   DataDockedVesselResult,
   MaresResponse,
   TelemetriaMareCurrent,
-  RainForecastResponse
+  RainForecastResponse,
+  PraticagemPautaResponse
 } from '../types';
+
 
 const API_BASE = '/api';
 
@@ -193,6 +195,25 @@ export async function fetchRainForecast(): Promise<RainForecastResponse> {
   if (!res.ok) throw new Error(`Falha ao obter previsão de chuva: ${res.statusText}`);
   const json = await res.json();
   return json.data;
+}
+
+export async function fetchPraticagemPauta(): Promise<PraticagemPautaResponse> {
+  const res = await fetch(`${API_BASE}/praticagem/pauta`);
+  if (!res.ok) throw new Error(`Falha ao obter pauta de praticagem: ${res.statusText}`);
+  const json = await res.json();
+  return json;
+}
+
+export async function syncPraticagem(): Promise<{ success: boolean; totalManobras: number; data: PraticagemPautaResponse }> {
+  const res = await fetch(`${API_BASE}/praticagem/sync`, {
+    method: 'POST'
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || err.details || 'Falha ao sincronizar com a Praticagem de SP');
+  }
+  const json = await res.json();
+  return json;
 }
 
 

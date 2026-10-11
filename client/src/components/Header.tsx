@@ -14,14 +14,15 @@ import {
   ChevronDown,
   Sparkles,
   Sun,
-  Moon
+  Moon,
+  Ship
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import type { ClimaResumo, MaresResponse, TelemetriaMareCurrent } from '../types';
 
 interface HeaderProps {
-  activeTab: 'gantt' | 'map' | 'admin';
-  setActiveTab: (tab: 'gantt' | 'map' | 'admin') => void;
+  activeTab: 'gantt' | 'map' | 'admin' | 'praticagem';
+  setActiveTab: (tab: 'gantt' | 'map' | 'admin' | 'praticagem') => void;
   clima: ClimaResumo | null;
   mares?: MaresResponse | null;
   telemetriaMare?: TelemetriaMareCurrent | null;
@@ -168,7 +169,21 @@ export const Header: React.FC<HeaderProps> = ({
           <Sliders className="w-4 h-4" />
           <span>Gestão & Fila</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('praticagem')}
+          className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+            activeTab === 'praticagem'
+              ? 'bg-blue-600 dark:bg-cyan-600 text-white shadow-md shadow-blue-600/30 dark:shadow-cyan-600/30'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-cco-panel'
+          }`}
+          title="Pauta de Serviços e Manobras da Praticagem (SP Pilots)"
+        >
+          <Ship className="w-4 h-4" />
+          <span>Praticagem</span>
+        </button>
       </div>
+
 
       {/* Direita: Relógio, Clima, Alternador de Tema e Ações Rápidas */}
       <div className="flex items-center space-x-2.5">

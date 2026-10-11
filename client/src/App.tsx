@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { GanttChart } from './components/GanttChart';
 import { CanalMap } from './components/CanalMap';
 import { AdminQueue } from './components/AdminQueue';
+import { PraticagemView } from './components/PraticagemView';
 import { NavioModal } from './components/NavioModal';
 import { GanttShipDetailsModal } from './components/GanttShipDetailsModal';
 import { ConfirmDeleteModal } from './components/ConfirmDeleteModal';
@@ -22,7 +23,8 @@ import {
 import type { NavioLineup, ResumoOperacional, ClimaResumo, StatusCor, MaresResponse, TelemetriaMareCurrent } from './types';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'gantt' | 'map' | 'admin'>('gantt');
+  const [activeTab, setActiveTab] = useState<'gantt' | 'map' | 'admin' | 'praticagem'>('gantt');
+
   const [scaleDays, setScaleDays] = useState<7 | 14 | 28>(7);
   const [navios, setNavios] = useState<NavioLineup[]>([]);
   const [operacional, setOperacional] = useState<ResumoOperacional | null>(null);
@@ -333,7 +335,19 @@ export const App: React.FC = () => {
             isProcessing={isProcessing}
           />
         )}
+
+        {activeTab === 'praticagem' && (
+          <PraticagemView
+            onSelectNavioLineup={(imo) => {
+              const found = navios.find((n) => n.imo === imo);
+              if (found) {
+                setNavioDetalhesGantt(found);
+              }
+            }}
+          />
+        )}
       </main>
+
 
       {/* Modal de Detalhes da Embarcação (Acionado pela Gestão & Fila) */}
       {navioDetalhesGantt && (

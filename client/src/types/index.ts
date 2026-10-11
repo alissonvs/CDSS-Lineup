@@ -199,3 +199,72 @@ export interface DataDockedVesselResult {
   updateTime?: string;
   sincronizado_em?: string;
 }
+
+export type CategoriaManobra =
+  | 'ENCERRADAS'
+  | 'EM_ANDAMENTO'
+  | 'CONFIRMADAS'
+  | 'CONFIRMADAS_AGENTE'
+  | 'SOLICITADAS';
+
+export interface PraticagemManobra {
+  id?: number;
+  spManobraId?: number | null;
+  categoria: CategoriaManobra;
+  categoriaLabel: string;
+  corFundo?: string;
+  nomeNavio: string;
+  imo?: string | null;
+  tipoManobra: 'E' | 'S' | 'M' | string;
+  localOrigem: string;
+  localDestino: string;
+  horarioStr: string;
+  horarioIso: string;
+  indicadores: string[];
+  agente?: string;
+  calado?: number | null;
+  bordo?: string;
+  rebocador?: string;
+  observacoes?: string;
+  detalhesNavio?: Record<string, string> | null;
+  vinculoLineupImo?: string | null;
+  atualizadoEm?: string;
+}
+
+export interface PraticagemResumoPortoItem {
+  id?: number;
+  tipo: 'AGUARDADOS' | 'FUNDEADOS' | 'ATRACADOS';
+  navio: string;
+  berco?: string | null;
+  dataHoraStr?: string | null;
+  dataHoraIso?: string | null;
+  ordem?: number;
+  vinculoLineupImo?: string | null;
+}
+
+export interface PraticagemSyncStatus {
+  ultimaSincronizacao: string | null;
+  status: string;
+  totalManobras: number;
+  totalAguardados: number;
+  totalFundeados: number;
+  totalAtracados: number;
+  mensagemErro?: string | null;
+}
+
+export interface PraticagemPautaResponse {
+  manobras: {
+    encerradas: PraticagemManobra[];
+    emAndamento: PraticagemManobra[];
+    confirmadas: PraticagemManobra[];
+    confirmadasAgente: PraticagemManobra[];
+    solicitadas: PraticagemManobra[];
+  };
+  resumoPorto: {
+    aguardados: PraticagemResumoPortoItem[];
+    fundeados: PraticagemResumoPortoItem[];
+    atracados: PraticagemResumoPortoItem[];
+  };
+  syncStatus: PraticagemSyncStatus;
+}
+
