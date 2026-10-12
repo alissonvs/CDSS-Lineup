@@ -12,24 +12,34 @@
 </p>
 
 > **Sistema Web Operacional de Alta Densidade e Análise Preditiva para Centros de Controle Operacional (CCO)**  
-> Desenvolvido sob medida para o **Porto de São Sebastião (CDSS)**, com motor determinístico em UTC invariante para berço comercial único, alternância ergonômica entre **Dark e Light Mode**, validação cruzada de telemetria satelital (**AIS DataDocked** vs **SISPORT Oficial**), integração com a **Pauta de Serviços da Praticagem de São Sebastião (SP Pilots)** com **Ajuste Operacional Automático (Projeção Real)**, telemetria maregráfica em tempo real (**SP Pilots** & **DHN**), análise preditiva de **Folga Abaixo da Quilha (UKC - Under Keel Clearance)**, acompanhamento do **% de progresso de operação em berço**, resolução local de IMO via **Catálogo Oficial de Navios (16.200+ embarcações)**, cartografia homologada **CARTO** e delimitação vetorial oficial da **Área do Porto Organizado (Portaria nº 501/2019 - MINFRA/ANTAQ)**.
+> Desenvolvido sob medida para a **Companhia Docas de São Sebastião (CDSS)**, com motor determinístico em UTC invariante para berço comercial único, alternância ergonômica entre **Dark e Light Mode**, validação cruzada de telemetria satelital (**AIS DataDocked** vs **SISPORT Oficial**), integração em tempo real com a **Pauta de Serviços da Praticagem de São Paulo (SP Pilots)** com **Ajuste Operacional Automático (Projeção Real)**, telemetria maregráfica em tempo real (**SP Pilots** & **DHN**), análise preditiva de **Folga Abaixo da Quilha (UKC - Under Keel Clearance)** com **Duplo Calado Náutico (Entrada vs. Saída)**, acompanhamento em tempo real do **% de progresso de operação em berço (Run-Rate)**, resolução local de IMO via **Catálogo Naval (16.200+ embarcações)**, cartografia homologada **CARTO** e delimitação vetorial oficial da **Área do Porto Organizado (Portaria nº 501/2019 - MINFRA/ANTAQ)**.
 
 ---
 
 ## 📑 Sumário
 
 1. [Visão Geral & Arquitetura](#1-visão-geral--arquitetura)
-2. [Fluxo e Integrações do Sistema](#2-fluxo-e-integrações-do-sistema)
-3. [Inovações e Ergonomia Visual do Gantt CCO (v2.0)](#3-inovações-e-ergonomia-visual-do-gantt-cco-v20)
-4. [Segurança da Navegação & Análise Náutica de Maré (UKC)](#4-segurança-da-navegação--análise-náutica-de-maré-ukc)
-5. [Validação Cruzada: SISPORT Oficial vs. AIS Satelital](#5-validação-cruzada-sisport-oficial-vs-ais-satelital)
-6. [Integração com a Praticagem (SP Pilots) & Ajuste Operacional Automático](#6-integração-com-a-praticagem-sp-pilots--ajuste-operacional-automático)
-7. [Regras de Negócio e Algoritmo de Encadeamento](#7-regras-de-negócio-e-algoritmo-de-encadeamento)
-8. [Endpoints REST da API](#8-endpoints-rest-da-api)
-9. [Configuração do Ambiente (.env)](#9-configuração-do-ambiente-env)
-10. [Instruções de Execução Local](#10-instruções-de-execução-local)
-11. [Deploy com Docker e Dokploy](#11-deploy-com-docker-e-dokploy)
-12. [Licença & Uso](#12-licença--uso)
+2. [Fluxo de Dados e Integrações](#2-fluxo-de-dados-e-integrações)
+3. [Modelagem Matemática e Fórmulas Operacionais](#3-modelagem-matemática-e-fórmulas-operacionais)
+   - 3.1. [Duração Base de Operação e Pranchas Mínimas CDSS](#31-duração-base-de-operação-e-pranchas-mínimas-cdss)
+   - 3.2. [Fator de Paralisação por Chuva (Granéis Sensíveis)](#32-fator-de-paralisação-por-chuva-granéis-sensíveis)
+   - 3.3. [Duração Total da Janela de Berço e Intervalo de Manobra](#33-duração-total-da-janela-de-berço-e-intervalo-de-manobra)
+   - 3.4. [Progresso em Berço, Ritmo Efetivo e Tempo Restante (Run-Rate)](#34-progresso-em-berço-ritmo-efetivo-e-tempo-restante-run-rate)
+   - 3.5. [Engenharia Náutica de Marés e Folga Abaixo da Quilha (UKC)](#35-engenharia-náutica-de-marés-e-folga-abaixo-da-quilha-ukc)
+   - 3.6. [Duplo Calado Náutico Operacional (Entrada vs. Saída)](#36-duplo-calado-náutico-operacional-entrada-vs-saída)
+   - 3.7. [Interpolação Harmônica Sinusoidal de Maré (Curva Contínua)](#37-interpolação-harmônica-sinusoidal-de-maré-curva-contínua)
+   - 3.8. [Auditoria de Divergência Temporal de ETA (SISPORT vs. AIS)](#38-auditoria-de-divergência-temporal-de-eta-sisport-vs-ais)
+   - 3.9. [Algoritmo de Encadeamento em Cascata (Waterfall Scheduling)](#39-algoritmo-de-encadeamento-em-cascata-waterfall-scheduling)
+   - 3.10. [Taxa de Ocupação do Berço e Backlog de Carteira](#310-taxa-de-ocupação-do-berço-e-backlog-de-carteira)
+   - 3.11. [Algoritmo de Resolução de IMO (Jaro-Winkler)](#311-algoritmo-de-resolução-de-imo-jaro-winkler)
+4. [Inovações e Ergonomia Visual do Gantt CCO (v2.0)](#4-inovações-e-ergonomia-visual-do-gantt-cco-v20)
+5. [Integração com a Praticagem (SP Pilots) & Projeção Real](#5-integração-com-a-praticagem-sp-pilots--projeção-real)
+6. [Canal de São Sebastião & Cartografia ANTAQ](#6-canal-de-são-sebastião--cartografia-antaq)
+7. [Endpoints REST da API](#7-endpoints-rest-da-api)
+8. [Configuração do Ambiente (.env)](#8-configuração-do-ambiente-env)
+9. [Instruções de Execução Local](#9-instruções-de-execução-local)
+10. [Deploy com Docker e Dokploy](#10-deploy-com-docker-e-dokploy)
+11. [Licença & Uso](#11-licença--uso)
 
 ---
 
@@ -38,18 +48,21 @@
 O sistema adota uma arquitetura full-stack moderna, modular e fortemente tipada:
 
 * **Runtime:** Node.js (v20+ / v22+ LTS) em TypeScript (*strict mode*).
-* **Backend:** Express estruturado em camadas (rotas, controladores, serviços náuticos e motor determinístico).
+* **Backend:** Express estruturado em camadas de alta coesão:
+  * `controllers/`: Gerenciamento e sanitização de requisições HTTP.
+  * `services/engine.ts`: Motor determinístico de cálculo de fila contínua e encadeamento em cascata.
+  * `services/tideService.ts`: Módulo maregráfico, cálculo dinâmico de UKC e análise independente de calado (Entrada vs. Saída).
+  * `services/sisportSync.ts`: Scraper resiliente da programação oficial de navios e progresso de descarga (`portoss.sp.gov.br`).
+  * `services/spPilotsService.ts`: Scraper autenticado da Pauta de Manobras e tráfego de navios da Praticagem (`ssb.sppilots.com.br`).
+  * `services/weather.ts`: Telemetria de maré em tempo real e previsão horária de chuva via Open-Meteo.
+  * `services/navioMatcherService.ts`: Algoritmo fonético/ortográfico de resolução de IMO em 3 níveis.
 * **Banco de Dados:** **PostgreSQL** conectado via driver de alta performance [`postgres`](https://github.com/porsager/postgres) (*Tagged Template Literals*, pooling assíncrono, zero dependências nativas C++ e suporte a `DATABASE_URL`).
 * **Frontend:** SPA moderna desenvolvida com **React 19 + Vite + TypeScript + Tailwind CSS (v4) + Lucide Icons**, com suporte nativo a temas **Dark e Light**.
-* **Praticagem de São Sebastião (SP Pilots):** Web scraper autenticado de alta performance para a Pauta de Serviço oficial, com extração de 5 categorias de manobras e 3 seções de status do porto (Aguardados, Fundeados e Atracados), alimentando o motor de recálculo em tempo real.
-* **Cartografia Náutica:** **Leaflet.js** integrado aos tiles de alta fidelidade do **CARTO** (Positron, Dark Matter, Voyager e Satellite), com renderização de zonas portuárias da ANTAQ via GeoJSON.
-* **Telemetria de Maré ao Vivo:** Coleta em background a cada 5 minutos da Praticagem de São Paulo (**SP Pilots**), com fallback matemático harmônico oficial da **DHN/CHM**.
-* **Previsão de Chuva:** Integração meteorológica desacoplada (**Open-Meteo**) para acréscimo dinâmico de horas de paralisação em granéis sensíveis (Barrilha, Trigo, Cevada, etc.).
-* **Catálogo Naval Local:** Indexação de mais de 16.200 embarcações no banco local, permitindo resolução instantânea de IMO por algoritmo *fuzzy* sem depender de APIs externas.
+* **Cartografia Náutica:** **Leaflet.js** integrado aos tiles de alta fidelidade do **CARTO** (Positron, Dark Matter, Voyager e Satellite), com renderização de zonas portuárias da ANTAQ via GeoJSON e localização geográfica exata do Berço 101.
 
 ---
 
-## 2. Fluxo e Integrações do Sistema
+## 2. Fluxo de Dados e Integrações
 
 ```mermaid
 flowchart TD
@@ -58,34 +71,31 @@ flowchart TD
         AIS[DataDocked AIS<br/>Telemetria Satelital]
         PRAT[Praticagem SP Pilots<br/>Pauta de Serviço & Manobras]
         SPP[SP Pilots<br/>Telemetria de Maré ao Vivo]
-        DHN[DHN / CHM<br/>Modelo Harmônico Astronômico]
-        METEO[Open-Meteo<br/>Previsão de Chuva]
+        DHN[DHN / CHM<br/>Tábua Astronômica Oficial]
+        METEO[Open-Meteo<br/>Previsão de Chuva Horária]
     end
 
     subgraph Backend CDSS [Node.js 22 + Express + TypeScript]
         SYNC[Serviço de Sincronização<br/>sisportSync & syncAllService]
-        PRAT_SVC[Serviço da Praticagem<br/>praticagemService.ts]
-        MATCH[Motor de Casamento de Navios<br/>navioMatcherService]
-        TIDE[Serviço Maregráfico & UKC<br/>tideService & spPilotsService]
+        PRAT_SVC[Serviço da Praticagem<br/>spPilotsService.ts]
+        MATCH[Resolução Naval de IMO<br/>navioMatcherService.ts]
+        TIDE[Engenharia Náutica & UKC<br/>tideService.ts]
         MOTOR[Motor de Encadeamento CCO<br/>engine.ts]
-        API[API REST /api/lineup & /api/praticagem]
+        API[API REST /api/*]
     end
 
-    subgraph Persistência
-        PG[(PostgreSQL Database<br/>lineup_navios, praticagem_*, navios, pranchas, tabua_mares)]
-        CSV[docs/Navios.csv<br/>16.200+ Navios Indexados]
+    subgraph Persistência [PostgreSQL]
+        PG[(lineup_navios<br/>praticagem_manobras<br/>navios catálogo 16k+<br/>pranchas_produtividade<br/>tabua_mares)]
     end
 
     subgraph Frontend CCO [React 19 + Vite]
-        THEME[Alternância Dark & Light Mode<br/>Tailwind CSS v4 + Context]
-        GANTT[Gantt CCO v2.0<br/>Projeção Real Praticagem + Linha Mestre + Mini-Curva]
-        PRAT_VIEW[Aba Praticagem<br/>Pauta de Serviços & Sidebar de Tráfego]
-        MAPA[Mapa Náutico Interativo<br/>CARTO + Poligonal ANTAQ]
-        MODAIS[Ficha do Navio & Detalhes da Manobra]
+        GANTT[Gantt CCO v2.0<br/>Linha Mestre + Mini-Curva DHN]
+        PRAT_VIEW[Aba Praticagem<br/>Pauta de Manobras & Tráfego]
+        MAPA[Canal & Mapa<br/>Berço 101 + Poligonal ANTAQ]
+        MODAIS[Ficha da Escala & Duplo Calado]
     end
 
     SIS -->|Raspagem Programação Oficial e % Progresso| SYNC
-    CSV -->|Auto-Seed no Boot| PG
     PG -->|Consulta Inteligente de IMO| MATCH
     MATCH -->|IMO Resolvido em <1ms| SYNC
     AIS -->|Posição e ETA Transponder| SYNC
@@ -108,207 +118,332 @@ flowchart TD
 
 ---
 
-## 3. Inovações e Ergonomia Visual do Gantt CCO (v2.0)
+## 3. Modelagem Matemática e Fórmulas Operacionais
 
-### 3.1. Cabeçalho Empilhado Fixo (*Sticky Header Stack*)
-Para garantir que operadores do CCO nunca percam referências temporais ao analisar filas extensas, o Gantt implementa um cabeçalho fixo empilhado em 4 camadas via CSS `sticky`:
+Esta seção detalha todas as equações, algoritmos e limites de tolerância implementados no motor determinístico do sistema.
 
-1. **Linha de Marcador Temporal CCO (`sticky top-0 z-30`, 24px):**
-   * Contém a legenda operacional de referência em tempo real.
-   * **Cápsula "AGORA" Elevada:** Posicionada exclusivamente na faixa superior (`AGORA ▼`), eliminando sobreposição com números de dias ou marés.
-   * **Agulha Vertical Contínua:** Linha vermelha guia de alta precisão que atravessa toda a grade sem bloquear cliques (`pointer-events-none`).
-2. **Régua de Dias do Mês (`sticky top-[24px] z-30`, 44px):**
-   * Grade diária com destaque visual de fins de semana (Sáb/Dom) em azul marinho com contraste escuro.
-3. **Mini-Curva Contínua de Marés DHN (`sticky top-[68px] z-30`, 50px):**
-   * Sparkline vetorial SVG contínuo com preenchimento em gradiente e linha tracejada de cota segura (`Ref 1.00m`).
-4. **Linha 0 - Berço Comercial CDSS (`sticky top-[118px] z-30`, 48px):**
-   * Fita contínua mestre de ocupação do cais comercial único (Verde real + Azuis em série sem sobreposição temporal), permanentemente ancorada no topo.
+### 3.1. Duração Base de Operação e Pranchas Mínimas CDSS
 
-> [!TIP]
-> **Performance a 60 FPS:** Cada linha do Gantt integra o card lateral esquerdo (`w-[26.5rem]`) e a raia de barras em um único contêiner flexível sob um único scrollbar vertical (`overflow-y-auto`). Isso descarta listeners manuais de scroll em JavaScript e garante sincronização perfeita via GPU.
+A produtividade de movimentação de carga no Cais Comercial Único do Porto de São Sebastião é balizada pela **Prancha Mínima Homologada** por mercadoria versus a produtividade histórica observada:
 
-### 3.2. Mini-Curva Contínua de Marés (SVG Sparkline Sinusoidal)
-* **Interpolação Harmônica Contínua:** Síntese suave calculada a partir dos pontos discretos da DHN, com pontos intermediários por meio-período cosseno.
-* **Ocultação Inteligente por Escala:**
-  * **Escala 7D (Tática):** Exibe as cotas em fonte monoespaçada com setas indicativas: `▲1.25m` (ciano `#38bdf8`) e `▼0.33m` (âmbar `#f59e0b`).
-  * **Escalas 14D e 28D (Estratégicas):** Oculta os rótulos textuais de cota para evitar adensamento visual, preservando a curva gráfica e os círculos de ápice.
-* **Halo Protetor de Contraste:** Rótulos e círculos utilizam contorno escuro nativo (`paint-order: stroke fill; stroke: #070d18; stroke-width: 3.5px`), garantindo legibilidade mesmo quando a agulha vermelha do `AGORA` cruza o número.
+$$\text{PMD}_{\text{adotada}} = \max\left(\text{PMD}_{\text{histórica}},\, \text{Prancha Mínima CDSS}\right) \quad [\text{t/dia ou cabeças/dia}]$$
 
-### 3.3. Reposicionamento Ergonômico do Popover da Embarcação
-* **Ancoragem Lateral Externa:** Abre à direita do card (`left: 100%`, `ml-3`), projetando-se sobre a área de histórico consumido.
-* **Zero Oclusão da Fila:** A lista completa de navios adjacentes permanece 100% visível para comparação imediata.
-* **Inversão Vertical Inteligente:** Navios posicionados no terço inferior da tela têm o popover ancorado para crescer de baixo para cima (`bottom-0`), impedindo corte na tela.
+#### Tabela Oficial de Pranchas Mínimas CDSS:
 
-### 3.4. Indicadores de Ocupação e Backlog
-* **Ocupação do Berço (Janela 30D):** Cálculo rigoroso sobre a janela contratual de 720 horas mensais:
-  $$\text{Taxa Ocupação} = \frac{\min(\text{Horas no Mês}, 720)}{720} \times 100\%$$
-* **Backlog em Carteira:** Demonstra a demanda reprimida em fila contínua (ex.: *Fila Total: 2.166,7h • Demanda: 300,9% ~90 dias de cais*).
+| Mercadoria | Unidade | Prancha Mínima ($\text{dia}$) | Ritmo Equivalente ($\text{hora}$) | Sensível à Chuva? |
+|---|---|---|---|:---:|
+| **Barrilha** (*Soda Ash*) | Toneladas | $1.800\,\text{t/dia}$ | $75{,}00\,\text{t/h}$ | Sim |
+| **Trigo a Granel** | Toneladas | $3.400\,\text{t/dia}$ | $141{,}67\,\text{t/h}$ | Sim |
+| **Malte / Cevada a Granel** | Toneladas | $2.800\,\text{t/dia}$ | $116{,}67\,\text{t/h}$ | Sim |
+| **Carga Geral / Alumina** | Toneladas | $1.200\,\text{t/dia}$ | $50{,}00\,\text{t/h}$ | Sim |
+| **Carga Viva (Bois)** | Cabeças | $2.500\,\text{animais/dia}$ | $104{,}17\,\text{un/h}$ | Não |
 
-### 3.5. Alternância Dinâmica de Tema (Dark & Light Mode)
-Projetado sob medida para a diversidade de luminosidade dos Centros de Controle Operacional (CCO):
-* **Dark Mode (Padrão CCO):** Paleta noturna profunda de alta densidade (`#070d18`, `#0c1527`, bordas ciano/ardósia), minimizando fadiga ocular e eliminando reflexos em videowalls de monitoramento contínuo.
-* **Light Mode (Ergonomia Diurna):** Interface nítida e limpa orientada pela especificação de design (`#f8fafc`, painéis brancos puros, textos com contraste reforçado em cinza ardósia e azul corporativo).
-* **Seletor Rápido & Persistência:** Alternador instantâneo no cabeçalho com sincronização automática em `localStorage` e detecção inteligente de preferências do sistema (`prefers-color-scheme`).
+A **Duração Base de Operação** ($D_{\text{base}}$, em horas) é calculada por:
 
-### 3.6. Acompanhamento de Progresso da Operação (% SISPORT)
-Integração direta com os dados de produtividade e execução física da programação oficial:
-* **Indicador de Status:** O navio que está operando no berço comercial exibe um badge em destaque com percentual atualizado (`⚡ 21,1%`).
-* **Card da Embarcação:** Logo abaixo do produto e peso da carga (`BARRILHA / 27.000 t`), exibe o rótulo numérico e uma barra de progresso visual proporcional estilizada em verde esmeralda.
-* **Visibilidade Multissistema:** O progresso é refletido em sincronia na barra da Linha do Tempo (`OPERANDO • 21,1% • Xh`), no popover da escala, na tela de Gestão de Fila e nos popups do Mapa Náutico.
+$$D_{\text{base}} = \frac{V_{\text{total}}}{\frac{\text{PMD}_{\text{adotada}}}{24}} = \frac{24 \times V_{\text{total}}}{\text{PMD}_{\text{adotada}}}$$
 
-### 3.7. Interatividade dos Marcos Temporais (▲) & Abertura Direta de Ficha
-* **Setas de Marcos com Tooltip Rico:** As setas coloridas (`▲`) que demarcam cada evento temporal do navio (Previsão SISPORT em âmbar, Fundeio em vermelho, Início da Operação em esmeralda e Desatracação em ciano/roxo) possuem popover flutuante acionado por *hover*, detalhando data, horário e origem (ex.: *Desatracação confirmada pela Praticagem de SP*).
-* **Abertura Direta de Ficha no Gantt:** O operador pode clicar diretamente no card lateral esquerdo da embarcação ou em suas barras de operação para abrir imediatamente a ficha modal com todas as informações técnicas, meteorologia, validação AIS e pauta da Praticagem.
+Onde:
+* $V_{\text{total}}$: Volume total manifestado da carga (toneladas métricas ou número de cabeças).
 
 ---
 
-## 4. Segurança da Navegação & Análise Náutica de Maré (UKC)
+### 3.2. Fator de Paralisação por Chuva (Granéis Sensíveis)
 
-Para assegurar manobras de atracação e desatracação sem risco de encalhe no canal:
+Operações de granéis sólidos vegetais e químicos no Porto de São Sebastião são interrompidas sob precipitação pluviométrica para fechamento dos porões e proteção fitossanitária da carga.
 
-* **Batimetria Homologada:** Profundidade de projeto do berço comercial CDSS fixada em **$10{,}00\text{ m}$ sobre o Zero Hidrográfico (ZH)**.
-* **Calado Crítico:** Embarcações com calado superior a **$9{,}50\text{ m}$** recebem automaticamente o status `temRestricao = true`.
-* **Cálculo Dinâmico da Folga Abaixo da Quilha (Under Keel Clearance - UKC):**
-  $$\text{Profundidade Disponível} = \text{Profundidade Berço (ZH)} + \text{Altura da Maré}$$
-  $$\text{UKC} = \text{Profundidade Disponível} - \text{Calado Operacional}$$
-* **Margem Regulamentar da Marinha:** UKC mínimo obrigatório de **$0{,}50\text{ m}$**.
-* **Sinalização Visual:** Barras operacionais de navios restritos recebem padrão listrado de advertência e recomendação no tooltip da próxima **Preamar Segura**.
+* **Critério de Sensibilidade:** Uma carga é sensível se a mercadoria contiver em sua descrição os termos: `barrilha`, `barilha`, `trigo`, `cevada`, `malte`, `alumina`, `fertilizante`, `adubo` ou `açúcar`.
+* **Gatilho de Chuva:** O modelo meteorológico (Open-Meteo) avalia a precipitação horária prevista $P(t)$ no Canal de São Sebastião (Lat: `-23.82`, Lon: `-45.40`).
+* **Horas de Paralisação ($\Delta t_{\text{chuva}}$):**
 
----
+$$\Delta t_{\text{chuva}} = \sum_{t = t_{\text{inicio}}}^{t_{\text{fim}}} \mathbb{I}\left(P(t) > 0{,}20\,\text{mm/h}\right) \times 1{,}0\,\text{hora}$$
 
-## 5. Validação Cruzada: SISPORT Oficial vs. AIS Satelital
-
-O sistema mantém preservadas duas fontes temporais independentes:
-
-1. **`eta_previsto` (SISPORT Oficial):** Data oficial programada pela Autoridade Portuária no portal `portoss.sp.gov.br`. Nunca é sobrescrita pela telemetria.
-2. **`eta_ais` (Telemetria Satelital):** Previsão calculada pelos sensores de bordo e transmitida pelo transponder AIS.
-3. **Auditoria em Tempo Real:**
-   * Diferenças $\le 2\text{h}$: Consideradas em conformidade operacional.
-   * Diferenças $> 2\text{h}$: Exibição de alertas automáticos:
-     * `⚠️ Atraso AIS: +X.Xh`
-     * `⚡ Adiantado AIS: -X.Xh`
+Onde $\mathbb{I}(\cdot)$ é a função indicadora binária ($1$ se chover mais de $0{,}2\,\text{mm/h}$, $0$ caso contrário).
 
 ---
 
-## 6. Integração com a Praticagem (SP Pilots) & Ajuste Operacional Automático
+### 3.3. Duração Total da Janela de Berço e Intervalo de Manobra
 
-O sistema integra-se diretamente ao portal da **Praticagem de São Sebastião** (`https://ssb.sppilots.com.br/sources/manobra/pautaservico.asp`) por meio de um serviço de raspagem web autenticado e resiliente:
+O tempo total de ocupação do berço comercial ($D_{\text{total}}$) adiciona a margem náutica regulamentar de manobra portuária:
 
-### 6.1. Pauta de Serviços e Status do Porto
-* **Autenticação Segura:** Sessão autenticada via credenciais institucionais configuradas no ambiente (`SP_PILOTS_USER` e `SP_PILOTS_PASS`).
-* **5 Categorias de Manobras:**
-  1. `PTA6` &bull; **Encerradas** (`#ff4a4a`)
-  2. `PTA5` &bull; **Em Andamento** (`#D1A2F9`)
-  3. `PTA4` &bull; **Confirmadas** (`#b7b7ff`)
-  4. `PTA3` &bull; **Confirmadas pelo Agente** (`#ffffcc`)
-  5. `PTA1` &bull; **Solicitadas** (`#ffffff`)
-* **Resumo do Porto (Barra Lateral):**
-  * **Aguardados:** Navios programados com data e hora prevista.
-  * **Fundeados:** Navios fundeados fisicamente na barra em espera de berço.
-  * **Atracados:** Ocupação atual por cais/terminal (P1, P2, P3 e Cais Comercial CDSS).
-* **Vinculação Automática CDSS:** Os navios da pauta e do resumo são correlacionados automaticamente com o Line-up do porto por IMO e nome com o selo visual **`[CDSS]`**.
+$$D_{\text{total}} = D_{\text{base}} + \Delta t_{\text{chuva}} + \Delta t_{\text{manobra}}$$
 
-### 6.2. Ajuste Operacional Automático (Projeção Real no Motor)
-Em vez de depender exclusivamente do cálculo teórico de produtividade (PMD), o motor de cálculo incorpora as decisões náuticas reais da Praticagem:
-1. **Navio no Berço Comercial (`ADRIATIC ROSE`):**
-   * Ao detectar uma manobra de saída (`S` do `CAIS`), a estimativa teórica é substituída pela data e horário oficial agendados na Praticagem (ex.: `11/10 às 22:00 BRT`).
-   * A origem da previsão é gravada como `PRATICAGEM`, e o bloco no Gantt recebe a etiqueta `⚙ OP ➔ ⚓ DESATRAC. (PRATICAGEM)`.
-2. **Próximo Navio na Fila (`AFRICAN GROUSE`):**
-   * Navios com manobra de entrada agendada para o `CAIS` têm prioridade máxima de agendamento na fila, posicionando-se para atracação imediatamente após a desatracação do navio anterior mais a folga regulamentar ($\Delta t = 2{,}0\text{h}$).
-3. **Cascateamento em Série Temporal (Waterfall):**
-   * Toda a fila subsequente (`YOSOR`, `ADVENTURER`, etc.) cascateia suas previsões sem colisões de berço, mantendo o planejamento do porto sincronizado com as janelas reais.
-
-### 6.3. Rotina Híbrida de Sincronização
-* **Automática:**
-  * **Boot:** Disparada imediatamente ao subir a aplicação (`initializeDatabase()` e primeira carga).
-  * **Worker em Segundo Plano:** Agendado para rodar a cada **5 minutos** no backend via `setInterval`.
-  * **Interface Web:** Polling a cada **2 minutos** enquanto a aba *Praticagem* estiver aberta.
-* **Manual:**
-  * Botão `🔄 Sincronizar` na aba *Praticagem* (atualização imediata da pauta).
-  * Botão unificado `🔄 Sincronizar CDSS` no cabeçalho geral (agrega SISPORT + Praticagem + DataDocked + Recálculo).
-
-### 6.4. Interface do Usuário (Aba "Praticagem" & Visão Integrada no Gantt)
-* **Aba Dedicada "Praticagem":**
-  * Localizada na navegação superior principal ao lado de *Gestão & Fila* e *Mapa Náutico*.
-  * **Filtros Ágeis:** Campo de busca em tempo real (nome do navio, IMO ou tipo de manobra) e chips de filtragem rápida por categoria (`Todas`, `PTA6 Encerradas`, `PTA5 Em Andamento`, `PTA4 Confirmadas`, `PTA3 Conf. Agente`, `PTA1 Solicitadas`).
-  * **Sidebar de Tráfego do Porto:** Painéis laterais com resumos sincronizados em tempo real de navios *Aguardados*, *Fundeados* e *Atracados* por terminal (P1, P2, P3 e Cais Comercial).
-  * **Selo `[CDSS]`:** Destaque visual automático identificando embarcações que possuem escala ativa ou programada no Line-up comercial.
-  * **Modal de Detalhes da Manobra:** Clique em qualquer card para inspecionar todas as informações oficiais (data/hora, bordo de atracação, berço, calados de proa/popa/aéreo, rebocadores alocados, prático designado, agência e comandante).
-* **Reflexo Visual no Gantt CCO:**
-  * **Barra de Operação:** Exibe a etiqueta `⚙ OP ➔ ⚓ DESATRAC. (PRATICAGEM)` para o navio em cais com saída agendada.
-  * **Badge de Alerta no Card:** Etiqueta roxa `⚓ Saída Praticagem` no card lateral do navio.
-  * **Ficha Modal da Escala ([GanttShipDetailsModal.tsx](file:///d:/DEV/CDSS-Lineup/client/src/components/GanttShipDetailsModal.tsx)):** Card dedicado destacando os dados da pauta da Praticagem e o badge `TÉRMINO PREVISTO ⚓ Praticagem`.
-  * **Interatividade nos Marcos (`▲`):** Tooltip flutuante sobre a seta de término informando a confirmação oficial da Praticagem de SP.
+* $\Delta t_{\text{manobra}} = 2{,}0\,\text{horas}$: Intervalo padrão entre a largada dos cabos (desatracação) do navio anterior e a passagem do primeiro cabo (atracação e amarração nos cabeços) do próximo navio da fila.
 
 ---
 
-## 7. Regras de Negócio e Algoritmo de Encadeamento
+### 3.4. Progresso em Berço, Ritmo Efetivo e Tempo Restante (Run-Rate)
 
-### 7.1. Semântica de Cores CDSS
-* 🟢 **Verde (Operando Real):** Navio fisicamente no berço comercial único. Bipartido: o tempo transcorrido no passado ancora na atracação real e estende-se até o instante `AGORA`.
-* 🔵 **Azul (Previsão de Operação):** Tempo restante de cais projetado a partir do `AGORA` (para o navio verde) ou janela futura encadeada (para os navios da fila).
-* 🔴 **Vermelho (No Fundeio Real):** Navio ancorado fisicamente na barra aguardando liberação.
-* 🟠 **Laranja (Fundeio Previsto / Espera):** Tempo de espera projetado desde a prontidão/ETA até o momento da atracação.
-* ⚪ **Cinza (Liberado Autoridades):** Navio com Livre Prática deferida (`livre_pratica_ok = 1`).
+Para a embarcação que está fisicamente atracada operando no berço comercial (`status_cor = VERDE`), o sistema não utiliza uma estimativa estática, mas sim um motor adaptativo de **Run-Rate Efetivo**:
 
-### 7.2. Duração da Janela de Berço
-$$\text{Tempo Total (h)} = \text{Duração Base (h)} + \Delta t_{\text{chuva}} + \Delta t_{\text{manobra}}$$
+1. **Volume Já Movimentado ($V_{\text{realizado}}$):**
+   $$V_{\text{realizado}} = V_{\text{total}} \times \left(\frac{P_{\text{operacao}}}{100}\right) \quad [\text{t}]$$
+   Onde $P_{\text{operacao}} \in [0, 100]$ é o percentual de carga movimentada lido do SISPORT ou ajustado no turno.
 
-* **Duração Base:** $\text{Volume (t)} \div \left( \frac{\max(\text{PMD Histórica}, \text{Prancha Mínima CDSS})}{24} \right)$
-* $\Delta t_{\text{manobra}} = 2{,}0\text{ horas}$ (folga regulamentar de desatracação e amarração entre escalas).
-* $\Delta t_{\text{chuva}}$: para cargas sensíveis (`sensivel_chuva = 1`), soma $1{,}0\text{h}$ para cada hora com precipitação prevista $> 0{,}2\text{ mm/h}$.
+2. **Volume Restante a Movimentar ($V_{\text{restante}}$):**
+   $$V_{\text{restante}} = V_{\text{total}} - V_{\text{realizado}} = V_{\text{total}} \times \left(1 - \frac{P_{\text{operacao}}}{100}\right) \quad [\text{t}]$$
 
-### 7.3. Catálogo Oficial de Navios & Resolução Determinística de IMO
-Elimina completamente a latência, quotas e falhas de serviços externos de dados navais:
-* **Base de Dados Dedicada:** Tabela `navios` no PostgreSQL contendo mais de **16.200 embarcações** indexadas por nome e código IMO oficial.
-* **Algoritmo de Correspondência em 3 Níveis:**
-  1. **Nível 1 (Exato):** Correspondência direta por string sanitizada e normalizada.
-  2. **Nível 2 (Canônico):** Remoção de ruídos operacionais, prefixos e sufixos de numerais romanos (ex.: `II`, `III`, `MV`, `MT`, pontuações).
-  3. **Nível 3 (Fuzzy Jaro-Winkler):** Busca por aproximação fonética/ortográfica com índice de similaridade $\ge 0{,}85$.
-* **Performance:** Resolução executada localmente no banco em menos de **$1\text{ ms}$**, garantindo 100% de taxa de identificação de IMOs no Line-Up ativo.
-* **Carga de Dados:** Script dedicado para importação e reprocessamento a partir de `docs/Navios.csv` (`npm run import:navios`).
+3. **Tempo Efetivo Decorrido de Cais ($t_{\text{decorrido}}$):**
+   $$t_{\text{decorrido}} = \max\left(0{,}50\,\text{h},\, \frac{\text{Momento Atual (Agora)} - t_{\text{inicio\_operacao}}}{3600 \times 1000}\right) \quad [\text{h}]$$
+
+4. **Taxa Efetiva de Produção ($\text{Taxa}_{\text{efetiva}}$):**
+   $$\text{Taxa}_{\text{efetiva}} = \frac{V_{\text{realizado}}}{t_{\text{decorrido}}} \quad [\text{t/h}]$$
+   $$\text{Ritmo Diário Equivalente} = \text{Taxa}_{\text{efetiva}} \times 24 \quad [\text{t/dia}]$$
+
+5. **Tempo Restante Estimado de Desatracação ($t_{\text{restante}}$):**
+   $$t_{\text{restante}} = \begin{cases} 
+   \frac{V_{\text{restante}}}{\text{Taxa}_{\text{efetiva}}} + \Delta t_{\text{manobra}}, & \text{se } P_{\text{operacao}} \ge 5\% \text{ e } \text{Taxa}_{\text{efetiva}} > 0 \\
+   D_{\text{base}} \times \left(1 - \frac{P_{\text{operacao}}}{100}\right) + \Delta t_{\text{manobra}}, & \text{caso contrário (fallback de prancha nominal)}
+   \end{cases}$$
+
+6. **Término Previsto da Operação:**
+   $$t_{\text{fim\_atracacao}} = \text{Agora} + t_{\text{restante}}$$
 
 ---
 
-## 8. Endpoints REST da API
+### 3.5. Engenharia Náutica de Marés e Folga Abaixo da Quilha (UKC)
+
+A navegação no Canal de São Sebastião e a manobra no Berço 101 são condicionadas pelas profundidades mínimas de segurança estabelecidas pela Autoridade Marítima (Marinha do Brasil / Capitania dos Portos):
+
+* **Profundidade de Projeto do Berço 101 ($h_{\text{berço}}$):** Fixada em $10{,}00\,\text{m}$ em relação ao Zero Hidrográfico (ZH).
+* **Margem Regulamentar Mínima ($\text{UKC}_{\text{mínimo}}$):** Exigência de **$0{,}50\,\text{m}$** (50 cm de folga líquida de água sob a quilha).
+* **Calado Crítico Limiar:** Navios com calado $\ge 9{,}50\,\text{m}$ dependem obrigatoriamente de maré positiva para atracação segura ($10{,}00\,\text{m} - 0{,}50\,\text{m} = 9{,}50\,\text{m}$).
+
+#### Fórmulas de Lâmina d'Água e UKC:
+
+$$\text{Profundidade Disponível}(t) = h_{\text{berço}} + M(t) = 10{,}00 + M(t) \quad [\text{m}]$$
+
+$$\text{UKC}(t) = \text{Profundidade Disponível}(t) - C_{\text{manobra}} = 10{,}00 + M(t) - C_{\text{manobra}} \quad [\text{m}]$$
+
+Onde $M(t)$ é a altura da maré instantânea em relação ao ZH e $C_{\text{manobra}}$ é o calado específico daquela manobra.
+
+#### Maré Mínima Requerida ($M_{\text{requerida}}$):
+
+$$M_{\text{requerida}} = C_{\text{manobra}} + \text{UKC}_{\text{mínimo}} - h_{\text{berço}} = C_{\text{manobra}} + 0{,}50 - 10{,}00 = C_{\text{manobra}} - 9{,}50 \quad [\text{m}]$$
+
+#### Classificação de Risco Náutico da Manobra:
+
+$$\text{Nível de Risco} = \begin{cases}
+\textbf{CRÍTICO} & \iff \text{UKC} < 0{,}00\,\text{m} \quad (\text{Risco iminente de tocar o fundo / encalhe}) \\
+\textbf{ATENÇÃO} & \iff 0{,}00\,\text{m} \le \text{UKC} < 0{,}50\,\text{m} \quad (\text{UKC abaixo da margem regulamentar da Marinha}) \\
+\textbf{SEGURO} & \iff \text{UKC} \ge 0{,}50\,\text{m} \quad (\text{Conformidade náutica plena})
+\end{cases}$$
+
+---
+
+### 3.6. Duplo Calado Náutico Operacional (Entrada vs. Saída)
+
+> [!IMPORTANT]
+> **Eliminação de Falsos Alarmes de Encalhe na Desatracação:**  
+> Navios graneleiros chegam a São Sebastião carregados no calado máximo ($8{,}50 - 11{,}50\,\text{m}$), mas desatracam em **lastro** ($5{,}80 - 6{,}80\,\text{m}$) após a descarga. Modelos anteriores que utilizavam um calado único geravam falsos alertas de encalhe na desatracação.
+
+O sistema implementa o desacoplamento integral do cálculo:
+
+1. **Atracação:** Avaliada estritamente contra o **Calado de Entrada ($C_{\text{entrada}}$)**.
+2. **Desatracação:** Avaliada estritamente contra o **Calado de Saída ($C_{\text{saída}}$)**.
+
+#### Regras de Dedução Operacional Automática:
+
+* **Graneis de Descarga / Importação (Barrilha, Trigo, Cevada, Malte, Alumina):**
+  $$C_{\text{entrada}} = \text{Calado Informado (Carregado)}$$
+  $$C_{\text{saída}} = \max\left(5{,}80\,\text{m},\, \min\left(6{,}80\,\text{m},\, C_{\text{entrada}} - 3{,}40\,\text{m}\right)\right) \quad (\text{Condição de Lastro})$$
+  *Exemplo:* Navio *AFRICAN GROUSE* entra com $11{,}20\,\text{m}$ (requer preamar de $1{,}70\,\text{m}$) e sai em lastro com $6{,}50\,\text{m}$ ($\text{UKC} = 10{,}00 + 1{,}23 - 6{,}50 = +4{,}73\,\text{m}$, manobra 100% segura).
+
+* **Exportação de Carga Viva (Animais Vivos):**
+  $$C_{\text{entrada}} = \max\left(6{,}00\,\text{m},\, C_{\text{saída}} - 0{,}90\,\text{m}\right) \quad (\text{Chegada em Lastro})$$
+  $$C_{\text{saída}} = \text{Calado Informado (Carregado)}$$
+
+* **Integração com a Praticagem de SP (`praticagem_manobras`):**
+  Se a Pauta Oficial da Praticagem possuir calados registrados para a manobra (`E` para entrada ou `S` para saída), os valores declarados pelos práticos têm precedência sobre qualquer cálculo teórico.
+
+---
+
+### 3.7. Interpolação Harmônica Sinusoidal de Maré (Curva Contínua)
+
+A Tábua da DHN/CHM fornece os extremos discretos astronômicos (Preamar e Baixamar). Para calcular a maré em qualquer minuto intermediário $t \in [t_1, t_2]$ entre dois extremos sucessivos $(t_1, y_1)$ e $(t_2, y_2)$, o sistema resolve a curva harmônica sinusoidal contínua:
+
+$$M(t) = \frac{y_1 + y_2}{2} + \frac{y_1 - y_2}{2} \cdot \cos\left(\pi \cdot \frac{t - t_1}{t_2 - t_1}\right)$$
+
+Propriedades físicas garantidas:
+* $M(t_1) = y_1$ e $M(t_2) = y_2$.
+* Derivada $\frac{dM}{dt} = 0$ em $t = t_1$ e $t = t_2$ (estofo de maré sem descontinuidade).
+* Curvatura física realista de transição enchente/vazante.
+
+---
+
+### 3.8. Auditoria de Divergência Temporal de ETA (SISPORT vs. AIS)
+
+Para cada escala, o sistema confronta o horário programado oficial com a telemetria satelital de bordo em tempo real:
+
+$$\Delta \text{ETA} = \frac{t_{\text{eta\_ais}} - t_{\text{eta\_previsto}}}{3600 \times 1000} \quad [\text{horas}]$$
+
+#### Faixas de Auditoria CCO:
+
+| Intervalo | Status | Classificação CCO | Ação Operacional |
+|---|---|---|---|
+| $|\Delta \text{ETA}| \le 2{,}0\,\text{h}$ | **Conforme** | Tolerância Normal | Nenhuma intervenção necessária |
+| $2{,}0\,\text{h} < \Delta \text{ETA} \le 24{,}0\,\text{h}$ | **Atraso Moderado** | ⚠️ `Atraso AIS: +Xh` | Monitorar evolução da velocidade de cruzeiro |
+| $\Delta \text{ETA} > 24{,}0\,\text{h}$ | **Atraso Crítico** | ⚠️ `Atraso Severo: +Xd` | Alertar CCO para possível reordenação de berço |
+| $-24{,}0\,\text{h} \le \Delta \text{ETA} < -2{,}0\,\text{h}$ | **Adiantado** | ⚡ `Adiantado: -Xh` | Planejar prontidão de berço antecipada |
+| $\Delta \text{ETA} < -24{,}0\,\text{h}$ | **Super Adiantado** | ⚡ `Adiantado: -Xd` | Avaliar disponibilidade de fundeio na barra |
+
+---
+
+### 3.9. Algoritmo de Encadeamento em Cascata (Waterfall Scheduling)
+
+O Porto de São Sebastião opera sob a restrição física de **berço comercial único** (Berço 101). O motor de agendamento em cascata (*Waterfall*) executa as seguintes etapas:
+
+```mermaid
+flowchart TD
+    A[Início do Motor] --> B{Navio no Berço<br/>status_cor == VERDE?}
+    B -- Sim --> C[Calcula Fim do Berço:<br/>Praticagem ou Run-Rate]
+    B -- Não --> D[Término Berço Anterior = AGORA]
+    C --> E[Loop nos Navios da Fila: i = 1 .. N]
+    D --> E
+    E --> F[Identifica Prontidão do Navio i:<br/>t_prontidao = Fundeio Real ou ETA]
+    F --> G["t_inicio(i) = max(t_prontidao(i), t_fim(i-1) + 2.0h)"]
+    G --> H["Calcula Duração: D_total = D_base + Chuva + 2.0h"]
+    H --> I["t_fim(i) = t_inicio(i) + D_total"]
+    I --> J[Avalia Restrições de Maré: UKC Entrada e Saída]
+    J --> K[Gera Blocos da Linha do Tempo e Marcos ▲]
+    K --> L{Mais navios na fila?}
+    L -- Sim --> E
+    L -- Não --> M[Retorna Lineup Atualizado & KPIs]
+```
+
+1. **Navio 1 (No Berço):**
+   * Início: Ancorado no horário real de início da atracação.
+   * Término: Definido pela Praticagem (se agendado) ou pelo Run-Rate efetivo da carga.
+2. **Navios Subsequentes ($i = 2, \dots, N$):**
+   $$t_{\text{atracacao}}(i) = \max\left(t_{\text{prontidao}}(i),\, t_{\text{desatracacao}}(i-1) + \Delta t_{\text{manobra}}\right)$$
+   $$t_{\text{desatracacao}}(i) = t_{\text{atracacao}}(i) + D_{\text{total}}(i)$$
+   Onde $t_{\text{prontidao}}(i) = t_{\text{chegada\_fundeio}} \text{ (se fundeado) ou } t_{\text{inicio\_operacao}} \text{ ou } t_{\text{eta\_previsto}}$.
+
+---
+
+### 3.10. Taxa de Ocupação do Berço e Backlog de Carteira
+
+O cálculo de ocupação do berço é dissociado em dois indicadores para evitar distorções estatísticas:
+
+1. **Taxa de Ocupação Nominal (Janela Mensal de 30 Dias = 720 Horas):**
+   $$\text{Taxa Ocupação (30D)} = \min\left(100\%,\, \frac{\min(H_{\text{janela}}, 720)}{720} \times 100\%\right)$$
+   Onde $H_{\text{janela}}$ é a soma das horas de ocupação de cais que recaem estritamente dentro dos próximos 30 dias a partir do `AGORA`.
+
+2. **Demanda Total em Carteira (Backlog Acumulado):**
+   $$\text{Demanda Total (\%)} = \frac{\sum_{i=1}^{N} D_{\text{total}}(i)}{720} \times 100\%$$
+   $$\text{Dias de Cais Necessários} = \frac{\sum_{i=1}^{N} D_{\text{total}}(i)}{24} \quad [\text{dias}]$$
+   *Exemplo Real:* Ocupação da janela $100\%$ | Backlog: $2.709{,}9\,\text{h}$ ($376{,}4\%$ de demanda acumulada, correspondendo a $\approx 113$ dias de cais).
+
+---
+
+### 3.11. Algoritmo de Resolução de IMO (Jaro-Winkler)
+
+Para evitar dependência de APIs lentas ou indisponíveis, a associação do nome de uma embarcação ao seu IMO oficial (indexado em base local de 16.200+ registros) utiliza uma estratégia em 3 níveis:
+
+* **Nível 1 (Exato):** Correspondência direta por string normalizada em maiúsculas:
+  $$\text{trim}(\text{upper}(S_{\text{busca}})) == \text{trim}(\text{upper}(S_{\text{banco}}))$$
+* **Nível 2 (Canônico):** Remoção de prefixos marítimos (`MV`, `MT`, `SS`), numerais romanos (`II`, `III`, `IV`) e caracteres especiais.
+* **Nível 3 (Distância de Jaro-Winkler):**
+  A similaridade de Jaro entre duas sequências $s_1$ e $s_2$ é dada por:
+  $$d_j = \begin{cases}
+  0, & \text{se } m = 0 \\
+  \frac{1}{3}\left(\frac{m}{|s_1|} + \frac{m}{|s_2|} + \frac{m - t}{m}\right), & \text{caso contrário}
+  \end{cases}$$
+  Onde $m$ é a quantidade de caracteres coincidentes dentro da janela $\lfloor \frac{\max(|s_1|, |s_2|)}{2} \rfloor - 1$, e $t$ é o número de transposições dividido por 2.
+
+  A métrica de Winkler adiciona peso ao prefixo coincidente inicial de comprimento $\ell \le 4$ com fator $p = 0{,}10$:
+  $$d_w = d_j + \ell \cdot p \cdot (1 - d_j)$$
+
+  * **Critério de Validação:** Aceita correspondência automática se $d_w \ge 0{,}85$. O tempo médio de resolução local no PostgreSQL é inferior a **$1{,}0\,\text{ms}$**.
+
+---
+
+## 4. Inovações e Ergonomia Visual do Gantt CCO (v2.0)
+
+O diagrama de Gantt foi construído para visualização ininterrupta em centros de controle operacional de videowall:
+
+1. **Cabeçalho Empilhado Fixo (*Sticky Stack*):**
+   * **Linha 1 (`top-0`, 24px):** Linha guia do momento presente (`AGORA ▼`) com agulha vertical contínua que desce por toda a grade.
+   * **Linha 2 (`top-24px`, 44px):** Régua dos dias do mês com destaque cromático nos finais de semana.
+   * **Linha 3 (`top-68px`, 50px):** Sparkline vetorial SVG da curva harmônica de maré da DHN (azul ciano preamar `▲`, âmbar baixamar `▼`).
+   * **Linha 4 (`top-118px`, 48px):** Fita contínua de ocupação do Berço 101 comercial.
+2. **Barras Operacionais Limpas:** Identificação da etapa mantida no topo e nos tooltips sob demanda (*hover*), com visual limpo e sem poluição visual.
+3. **Escalas Temporais Rápidas:** Alternador no topo para janelas de **7 Dias** (visão tática), **14 Dias** (visão quinzenal) e **28 Dias** (visão mensal de planejamento).
+4. **Semântica de Cores Oficial CDSS:**
+   * 🟢 **Verde:** Operando fisicamente no berço comercial único.
+   * 🔵 **Azul:** Previsão de berço futura encadeada pelo motor.
+   * 🔴 **Vermelho:** Fundeado na barra em espera confirmada.
+   * 🟠 **Laranja:** Espera prevista (aguardando chegada do navio).
+5. **Dark & Light Mode:** Paleta noturna profunda de alta densidade (`#070d18`) ou modo diurno de alto contraste (`#f8fafc`), com alternância instantânea.
+
+---
+
+## 5. Integração com a Praticagem (SP Pilots) & Projeção Real
+
+O módulo conecta-se ao portal oficial da Praticagem de São Sebastião (`ssb.sppilots.com.br`):
+
+* **Categorias de Manobra Capturadas:**
+  * `PTA6` &bull; **Encerradas**
+  * `PTA5` &bull; **Em Andamento**
+  * `PTA4` &bull; **Confirmadas**
+  * `PTA3` &bull; **Confirmadas pelo Agente**
+  * `PTA1` &bull; **Solicitadas**
+* **Projeção Real no Motor:** Quando a Praticagem agenda uma manobra de desatracação (`S`) para o navio em cais, o motor substitui a estimativa teórica pelo horário exato confirmado pelo prático (`origem_previsao_fim = 'PRATICAGEM'`).
+* **Sincronização Híbrida:** Automática a cada 5 minutos no backend e botão manual de atualização sob demanda.
+
+---
+
+## 6. Canal de São Sebastião & Cartografia ANTAQ
+
+A aba **Canal & Mapa** reúne a cartografia náutica oficial:
+
+* **Posicionamento Homologado do Berço 101:** Coordenadas oficiais de cais:
+  - **Latitude:** `-23.82390`
+  - **Longitude:** `-45.39950`
+  - Marcador de âncora posicionado com precisão submétrica no cais comercial (não no meio do canal).
+* **Poligonal do Porto Organizado:** Camada GeoJSON vetorial com os vértices oficiais definidos pela **Portaria nº 501/2019 - MINFRA/ANTAQ**.
+* **Basemaps CARTO:** Alternância entre mapas *Dark Matter*, *Positron*, *Voyager* e *Satélite*.
+
+---
+
+## 7. Endpoints REST da API
 
 | Método | Endpoint | Descrição |
 |---|---|---|
-| `GET` | `/api/health` | **Healthcheck probe:** Retorna status de saúde do container e conectividade ativa com o PostgreSQL |
-| `GET` | `/api/livez` | **Liveness probe:** Endpoint ultraleve para orquestradores (Docker, Dokploy, Kubernetes) |
-| `GET` | `/api/version` | Retorna o nome do serviço e a versão atual da aplicação (`v2.0.0`) |
-| `GET` | `/api/lineup` | Retorna o line-up com blocos discretos (`TimelineBlock[]`), marcos temporais, restrições de maré, projeção da Praticagem e KPIs |
-| `POST` | `/api/navios` | Cadastro manual de escala com resolução de IMO via Catálogo Oficial |
-| `PUT` | `/api/navios/:id` | Atualização cadastral, alteração de status operacional, livre prática ou controle do ajuste de Praticagem |
+| `GET` | `/api/health` | **Healthcheck probe:** Retorna saúde do container e conectividade ativa com PostgreSQL |
+| `GET` | `/api/livez` | **Liveness probe:** Endpoint ultraleve para Dokploy / Kubernetes |
+| `GET` | `/api/version` | Versão atual da aplicação (`v2.0.0`) |
+| `GET` | `/api/lineup` | Retorna o line-up com blocos discretos, marcos temporais, duplo calado, restrições de maré e KPIs |
+| `POST` | `/api/navios` | Cadastro manual de escala com resolução de IMO e campos de duplo calado |
+| `PUT` | `/api/navios/:id` | Atualização cadastral, alteração de status operacional, livre prática ou calados de entrada/saída |
 | `DELETE` | `/api/navios/:id` | Exclusão de escala com reindexação atômica da fila sequencial |
 | `POST` | `/api/navios/reordenar` | Reordenação em lote da fila de prioridade (`{ ids: number[] }`) |
 | `POST` | `/api/navios/sync/:imo` | Sincroniza telemetria satelital AIS (DataDocked) e atualiza `eta_ais` |
 | `POST` | `/api/sisport/sync` | Sincronização em tempo real com a programação oficial da CDSS (`portoss.sp.gov.br`) |
-| `POST` | `/api/sisport/sync-all` | **Sincronização 3 em 1:** SISPORT &rarr; Praticagem SP Pilots &rarr; DataDocked AIS em lote com controle de concorrência |
-| `GET` | `/api/praticagem/pauta` | Retorna os dados completos da Pauta da Praticagem (5 categorias de manobras, resumo de tráfego e status de sync) |
-| `POST` | `/api/praticagem/sync` | Força a sincronização imediata com o portal da Praticagem de São Sebastião (`sppilots.com.br`) |
-| `GET` | `/api/navios/search` | Consulta inteligente de navios no Catálogo Oficial por nome ou IMO com score e método fuzzy |
+| `POST` | `/api/sisport/sync-all` | **Sincronização 3 em 1:** SISPORT &rarr; Praticagem SP Pilots &rarr; DataDocked AIS |
+| `GET` | `/api/praticagem/pauta` | Pauta completa da Praticagem (5 categorias, calados declarados, resumo do porto) |
+| `POST` | `/api/praticagem/sync` | Força a sincronização imediata com a Praticagem de São Sebastião |
+| `GET` | `/api/navios/search` | Consulta inteligente no Catálogo de 16.200+ navios por nome ou IMO |
 | `GET` | `/api/operacional/resumo` | Retorna KPIs da central (Taxa de Ocupação, Horas Ocupadas, Volume Total) |
 | `GET` | `/api/clima` | Resumo meteorológico horário do canal de São Sebastião |
-| `GET` | `/api/mares` | Extremos astronômicos diários da tábua de marés da DHN/CHM para São Sebastião |
-| `GET` | `/api/weather/tide/current` | Telemetria maregráfica em tempo real da Praticagem de SP com fallback harmônico DHN |
-| `GET` | `/api/weather/rain/forecast` | Previsão horária de precipitação atmosférica desacoplada dos dados de maré |
+| `GET` | `/api/mares` | Extremos astronômicos diários da tábua de marés da DHN/CHM |
+| `GET` | `/api/weather/tide/current` | Telemetria maregráfica em tempo real (SP Pilots com fallback harmônico DHN) |
+| `GET` | `/api/weather/rain/forecast` | Previsão horária de precipitação atmosférica |
 
 ---
 
-## 9. Configuração do Ambiente (`.env`)
+## 8. Configuração do Ambiente (`.env`)
 
-Crie ou configure o arquivo `.env` na raiz do projeto com base no modelo [.env.example](file:///d:/DEV/CDSS-Lineup/.env.example):
+Crie o arquivo `.env` na raiz do projeto com base no modelo [.env.example](file:///d:/DEV/CDSS-Lineup/.env.example):
 
 ```env
 PORT=3000
 CLIENT_PORT=5173
 NODE_ENV=development
 
-# Conexão PostgreSQL (Produção / Dokploy / Remoto)
+# Conexão PostgreSQL
 DATABASE_URL=postgresql://usuario:senha@host:porta/banco
 
-# Credenciais e Acesso à Praticagem de São Sebastião (SP Pilots)
+# Credenciais de Acesso à Praticagem de São Sebastião (SP Pilots)
 SP_PILOTS_USER=docasssb
 SP_PILOTS_PASS="Docas#2019"
 SP_PILOTS_URL=https://ssb.sppilots.com.br
@@ -316,112 +451,58 @@ SP_PILOTS_URL=https://ssb.sppilots.com.br
 # Chave da API DataDocked para telemetria AIS satelital (opcional)
 DATADOCKED_API_KEY=sua_chave_datadocked_aqui
 
-# Chave de API do CARTO para tiles de mapas náuticos (https://carto.com/basemaps/apikey)
+# Chave de API do CARTO para tiles de mapas náuticos
 VITE_CARTO_API_KEY=sua_chave_carto_aqui
 ```
 
 ---
 
-## 10. Instruções de Execução Local
+## 9. Instruções de Execução Local
 
 ### Pré-requisitos
 * **Node.js** v20+ ou v22 LTS instalado.
 * Instância do **PostgreSQL** ativa (ou string `DATABASE_URL` configurada).
 
-### 1. Instalação das Dependências
+### 1. Instalação
 ```bash
-# Instala as dependências da raiz e automaticamente do cliente (via postinstall)
 npm install
 ```
 
-### 2. Execução em Desenvolvimento
+### 2. Execução em Modo de Desenvolvimento
 ```bash
-# Inicia simultaneamente o servidor backend Express e o cliente Vite com HMR
 npm run dev
 ```
 * **Frontend Web:** [`http://localhost:5173`](http://localhost:5173)
 * **Backend API:** [`http://localhost:3000/api/lineup`](http://localhost:3000/api/lineup)
-* **Pauta de Praticagem:** [`http://localhost:3000/api/praticagem/pauta`](http://localhost:3000/api/praticagem/pauta)
 
-### 3. Carga do Catálogo de Navios (Opcional)
+### 3. Build de Produção
 ```bash
-# Popula a tabela 'navios' com mais de 16.200 registros a partir de docs/Navios.csv
-# (Nota: o servidor executa essa carga automaticamente no boot caso a tabela esteja vazia)
-npm run import:navios       # ou npm run db:import-navios
-```
-
-### 4. Sincronização SISPORT via CLI
-```bash
-npm run sync:sisport
-```
-
-### 5. Build de Produção Local
-```bash
-# Compila backend (TypeScript) e frontend (Vite)
 npm run build
-
-# Inicia o servidor Express em modo de produção servindo os assets estáticos
 npm start
 ```
 
 ---
 
-## 11. Deploy com Docker e Dokploy
+## 10. Deploy com Docker e Dokploy
 
-O projeto está totalmente configurado para deploy em produção via **Docker** e **Dokploy** através de uma imagem multi-stage ultra-otimizada:
+O projeto conta com `Dockerfile` multi-stage altamente otimizado para deploy autônomo no Dokploy:
 
-### 11.1. Execução via Docker Compose
 ```bash
-# Constrói a imagem e inicia o container em segundo plano
+# Execução local via Docker Compose
 docker compose up -d --build
-
-# Acompanhar logs em tempo real
-docker compose logs -f
-
-# Encerrar container
-docker compose down
 ```
 
-### 11.2. Configuração no Painel do Dokploy
-
-1. **Criar Aplicação:** No Dokploy, crie uma nova aplicação a partir do repositório Git `https://github.com/alissonvs/CDSS-Lineup.git`.
-2. **Configuração de Branch:** Na aba **General** (card Git), defina a branch como **`main`** e clique em **Save**.
-3. **Build Type:** Na aba **General** (card Build Type), selecione **`Dockerfile`**:
-   * **Docker File:** `Dockerfile` (ou deixe em branco para o padrão).
-   * **Docker Context Path:** `.`
-   * **Docker Build Stage:** deixe em branco (utiliza o estágio final `runner`).
-   * Clique em **Save**.
-4. **Porta da Aplicação:** Configure a porta interna como **`3000`**.
-5. **Healthcheck Probe:** Configure o caminho de verificação como **`/api/health`**.
-6. **Variáveis de Ambiente (Aba Environment):**
-   ```env
-   NODE_ENV=production
-   PORT=3000
-   DATABASE_URL=postgresql://usuario:senha@host:porta/banco
-   SP_PILOTS_USER=docasssb
-   SP_PILOTS_PASS="Docas#2019"
-   SP_PILOTS_URL=https://ssb.sppilots.com.br
-   DATADOCKED_API_KEY=sua_chave_datadocked_aqui
-   VITE_CARTO_API_KEY=sua_chave_carto_aqui
-   ```
-7. **Disparar Deploy:** Clique em **Deploy**. Acompanhe o build na aba **Deployments** e os logs operacionais na aba **Logs**.
-
-### 11.3. Provisionamento e Auto-Migração no Boot
-* **Inclusão do Catálogo no Container:** O `Dockerfile` multi-stage copia o arquivo `docs/Navios.csv` tanto no build quanto na imagem final (`runner`).
-* **Auto-Seed e DDL:** Durante o boot do container, o script `initializeDatabase()` roda antes de abrir o tráfego HTTP:
-  1. Cria as tabelas `navios`, `lineup_navios`, `pranchas_produtividade`, `tabua_mares`, `praticagem_manobras`, `praticagem_resumo_porto` e `praticagem_sync_status` (se não existirem).
-  2. Popula automaticamente os **16.237 navios** caso a tabela `navios` esteja vazia.
-  3. Aplica migrações defensivas no esquema existente:
-     - `progresso_operacao DOUBLE PRECISION`
-     - `origem_previsao_fim TEXT DEFAULT 'CALCULADO'`
-     - `manobra_praticagem_id INTEGER`
-     - `manobra_praticagem_str TEXT`
-     - `ajuste_praticagem_ativo INTEGER DEFAULT 1`
-* **Zero intervenção manual:** O deploy no Dokploy é 100% autônomo e auto-configurável.
+### Configuração no Dokploy:
+1. Conecte o repositório Git na branch `main`.
+2. Configure **Build Type** como `Dockerfile`.
+3. Defina a porta como `3000`.
+4. Configure o Healthcheck como `/api/health`.
+5. Preencha as variáveis de ambiente (`DATABASE_URL`, `SP_PILOTS_USER`, etc.).
+6. Clique em **Deploy**. O container executa automaticamente a auto-migração de tabelas e indexação dos 16.200 navios no primeiro boot.
 
 ---
 
-## 12. Licença & Uso
+## 11. Licença & Uso
 
 Propriedade do projeto **PCS Lineup &bull; v2.0.0**.  
-Desenvolvido para apoio à tomada de decisão operacional, supervisão portuária e segurança da navegação no **Porto de São Sebastião (CDSS)**.
+Desenvolvido para apoio à tomada de decisão operacional, supervisão portuária e segurança da navegação na **Companhia Docas de São Sebastião (CDSS)**.
