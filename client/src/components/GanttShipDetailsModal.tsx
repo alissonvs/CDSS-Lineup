@@ -226,21 +226,53 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
             )}
           </div>
 
-          {/* Card de Progresso Operacional (SISPORT Oficial) */}
+          {/* Card de Progresso Operacional & Projeção Dinâmica por Run-Rate */}
           {isOperating && navio.progresso_operacao !== undefined && navio.progresso_operacao !== null && (
-            <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/25 rounded-xl border border-emerald-200 dark:border-emerald-500/30">
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-300 mb-1.5">
+            <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/25 rounded-xl border border-emerald-200 dark:border-emerald-500/30 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-300">
                 <span className="flex items-center space-x-1.5">
                   <Activity className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   <span>Progresso da Operação no Berço (SISPORT)</span>
                 </span>
-                <span className="font-mono text-sm">{navio.progresso_operacao.toFixed(1).replace('.', ',')}%</span>
+                <span className="font-mono text-sm bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded text-emerald-900 dark:text-emerald-200">
+                  {Number(navio.progresso_operacao).toFixed(1).replace('.', ',')}%
+                </span>
               </div>
               <div className="w-full bg-emerald-200/60 dark:bg-emerald-900/40 rounded-full h-2.5 overflow-hidden shadow-inner">
                 <div
                   className="bg-emerald-500 dark:bg-emerald-400 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.max(0, navio.progresso_operacao))}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, Number(navio.progresso_operacao)))}%` }}
                 />
+              </div>
+
+              {/* Métricas Dinâmicas de Esgotamento de Carga */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
+                <div className="p-2 rounded bg-white/80 dark:bg-slate-900/70 border border-emerald-100 dark:border-emerald-900/50">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">Volume Restante</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    {navio.volume_restante_t !== undefined
+                      ? `${navio.volume_restante_t.toLocaleString('pt-BR')} t`
+                      : `${Math.round((navio.volume_t || 0) * (1 - Number(navio.progresso_operacao) / 100)).toLocaleString('pt-BR')} t`}
+                  </span>
+                </div>
+
+                <div className="p-2 rounded bg-white/80 dark:bg-slate-900/70 border border-emerald-100 dark:border-emerald-900/50">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">Ritmo Efetivo</span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                    {navio.taxa_efetiva_t_hora && navio.taxa_efetiva_t_hora > 0
+                      ? `~${navio.taxa_efetiva_t_hora.toLocaleString('pt-BR')} t/h`
+                      : 'Em aferição'}
+                  </span>
+                </div>
+
+                <div className="p-2 rounded bg-white/80 dark:bg-slate-900/70 border border-emerald-100 dark:border-emerald-900/50">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">Tempo Restante Estimado</span>
+                  <span className="font-bold text-cyan-700 dark:text-cyan-400">
+                    {navio.tempo_restante_horas !== undefined
+                      ? `~${navio.tempo_restante_horas}h`
+                      : 'Projetando'}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -459,12 +491,18 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
                 </span>
               </div>
 
-              {/* Informações Técnicas de Cais e Calado */}
+              {/* Informações Técnicas de Cais e Calado Duplo */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
                 <div className="p-2 rounded-lg bg-white dark:bg-cco-darkest/80 border border-slate-200 dark:border-cco-border/60">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">Calado Navio</span>
-                  <span className={`font-bold ${navio.restricao_mare.temRestricao ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-slate-100'}`}>
-                    {navio.calado ? `${Number(navio.calado).toFixed(2)}m` : '-'}
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">Calado Entrada</span>
+                  <span className={`font-bold ${navio.restricao_mare.atracacao && !navio.restricao_mare.atracacao.seguro ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-slate-100'}`}>
+                    {navio.restricao_mare.caladoEntrada ? `${navio.restricao_mare.caladoEntrada.toFixed(2)}m` : '-'}
+                  </span>
+                </div>
+                <div className="p-2 rounded-lg bg-white dark:bg-cco-darkest/80 border border-slate-200 dark:border-cco-border/60">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">Calado Saída</span>
+                  <span className={`font-bold ${navio.restricao_mare.desatracacao && !navio.restricao_mare.desatracacao.seguro ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-slate-100'}`}>
+                    {navio.restricao_mare.caladoSaida ? `${navio.restricao_mare.caladoSaida.toFixed(2)}m` : '-'}
                   </span>
                 </div>
                 <div className="p-2 rounded-lg bg-white dark:bg-cco-darkest/80 border border-slate-200 dark:border-cco-border/60">
@@ -477,14 +515,6 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">UKC Mínimo</span>
                   <span className="font-bold text-slate-900 dark:text-slate-100">
                     {navio.restricao_mare.ukcMinimoExigido.toFixed(2)}m
-                  </span>
-                </div>
-                <div className="p-2 rounded-lg bg-white dark:bg-cco-darkest/80 border border-slate-200 dark:border-cco-border/60">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">Maré Mínima Requerida</span>
-                  <span className="font-bold text-blue-700 dark:text-cyan-300">
-                    {navio.restricao_mare.mareMinimaRequerida > 0
-                      ? `${navio.restricao_mare.mareMinimaRequerida.toFixed(2)}m`
-                      : 'Livre (0.0m)'}
                   </span>
                 </div>
               </div>
@@ -501,7 +531,7 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-sans font-bold text-blue-700 dark:text-cyan-400 uppercase tracking-wider">
-                      ⚓ Manobra de Atracação
+                      ⚓ Atracação (Calado: {navio.restricao_mare.caladoEntrada.toFixed(2)}m)
                     </span>
                     <span
                       className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
@@ -546,7 +576,7 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-sans font-bold text-blue-700 dark:text-cyan-400 uppercase tracking-wider">
-                      🚢 Manobra de Desatracação
+                      🚢 Desatracação (Calado: {navio.restricao_mare.caladoSaida.toFixed(2)}m)
                     </span>
                     <span
                       className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${

@@ -221,6 +221,7 @@ export function analisarManobraIndividual(
     tipoManobra,
     alturaMare,
     profundidadeTotalZh,
+    caladoManobra: calado,
     ukcCalculado,
     ukcMinimoExigido: UKC_MINIMO_REGULAMENTAR,
     seguro,
@@ -231,26 +232,66 @@ export function analisarManobraIndividual(
 }
 
 /**
+ * Obtém os calados operacionais de entrada e saída do navio
+ * com fallback inteligente para dedução por tipo de operação (Carga vs Descarga)
+ */
+export function obterCaladosOperacionaisNavio(navio: NavioLineup): {
+  caladoEntrada: number;
+  caladoSaida: number;
+  caladoMaximo: number;
+} {
+  const merc = (navio.mercadoria || '').toLowerCase();
+  const caladoPrincipal = navio.calado ? Number(navio.calado) : 8.5;
+
+  let caladoEntrada = navio.calado_entrada !== undefined && navio.calado_entrada !== null && Number(navio.calado_entrada) > 0
+    ? Number(navio.calado_entrada)
+    : caladoPrincipal;
+
+  let caladoSaida = navio.calado_saida !== undefined && navio.calado_saida !== null && Number(navio.calado_saida) > 0
+    ? Number(navio.calado_saida)
+    : caladoPrincipal;
+
+  // Dedução automática caso calado_entrada ou calado_saida não tenham sido definidos explicitamente
+  const entradaNaoInformada = navio.calado_entrada === undefined || navio.calado_entrada === null;
+  const saidaNaoInformada = navio.calado_saida === undefined || navio.calado_saida === null;
+
+  if (entradaNaoInformada || saidaNaoInformada) {
+    if (merc.includes('animais') || merc.includes('vivos') || merc.includes('viva')) {
+      // Embarque de Carga Viva: entra em lastro mais leve e desatraca carregado
+      if (entradaNaoInformada) caladoEntrada = Math.max(6.0, Math.round((caladoPrincipal - 0.9) * 10) / 10);
+      if (saidaNaoInformada) caladoSaida = caladoPrincipal;
+    } else if (merc.includes('barrilha') || merc.includes('trigo') || merc.includes('malte') || merc.includes('cevada')) {
+      // Descarga de Graneis (Importação): chega com calado total e sai em lastro (~6.2m)
+      if (entradaNaoInformada) caladoEntrada = caladoPrincipal;
+      if (saidaNaoInformada) {
+        const caladoLastroEstimado = Math.max(5.8, Math.min(6.8, Math.round((caladoPrincipal - 3.4) * 10) / 10));
+        caladoSaida = caladoLastroEstimado;
+      }
+    }
+  }
+
+  const caladoMaximo = Math.max(caladoEntrada, caladoSaida);
+  return {
+    caladoEntrada: Math.round(caladoEntrada * 10) / 10,
+    caladoSaida: Math.round(caladoSaida * 10) / 10,
+    caladoMaximo: Math.round(caladoMaximo * 10) / 10
+  };
+}
+
+/**
  * Analisa as restrições completas de maré e calado para um navio no line-up
+ * avaliando separadamente a Atracação (Calado de Entrada) e a Desatracação (Calado de Saída)
  */
 export function analisarRestricaoMareNavio(
   navio: NavioLineup,
   inicioIso?: string | null,
   fimIso?: string | null
 ): RestricaoMareNavio {
-  const calado = navio.calado ? Number(navio.calado) : 8.5;
-  const mareMinimaRequerida = Math.max(0, Math.round((calado + UKC_MINIMO_REGULAMENTAR - PROFUNDIDADE_BERCO_ZH) * 100) / 100);
+  const { caladoEntrada, caladoSaida, caladoMaximo } = obterCaladosOperacionaisNavio(navio);
 
-  // Navios com calado abaixo do limiar crítico (ex: 8.5m ou menor) têm folga abundante mesmo na maré mais baixa
-  if (calado < CALADO_CRITICO_LIMIAR) {
-    return {
-      temRestricao: false,
-      calado,
-      profundidadeBercoZh: PROFUNDIDADE_BERCO_ZH,
-      ukcMinimoExigido: UKC_MINIMO_REGULAMENTAR,
-      mareMinimaRequerida
-    };
-  }
+  const mareMinimaEntrada = Math.max(0, Math.round((caladoEntrada + UKC_MINIMO_REGULAMENTAR - PROFUNDIDADE_BERCO_ZH) * 100) / 100);
+  const mareMinimaSaida = Math.max(0, Math.round((caladoSaida + UKC_MINIMO_REGULAMENTAR - PROFUNDIDADE_BERCO_ZH) * 100) / 100);
+  const mareMinimaGeral = Math.max(mareMinimaEntrada, mareMinimaSaida);
 
   let atracacaoAnalise: AnaliseManobraMare | undefined;
   let desatracacaoAnalise: AnaliseManobraMare | undefined;
@@ -258,14 +299,14 @@ export function analisarRestricaoMareNavio(
   if (inicioIso) {
     const dInicio = new Date(inicioIso.endsWith('Z') ? inicioIso : inicioIso + 'Z');
     if (!isNaN(dInicio.getTime())) {
-      atracacaoAnalise = analisarManobraIndividual(calado, dInicio, 'ATRACACAO');
+      atracacaoAnalise = analisarManobraIndividual(caladoEntrada, dInicio, 'ATRACACAO');
     }
   }
 
   if (fimIso) {
     const dFim = new Date(fimIso.endsWith('Z') ? fimIso : fimIso + 'Z');
     if (!isNaN(dFim.getTime())) {
-      desatracacaoAnalise = analisarManobraIndividual(calado, dFim, 'DESATRACACAO');
+      desatracacaoAnalise = analisarManobraIndividual(caladoSaida, dFim, 'DESATRACACAO');
     }
   }
 
@@ -273,19 +314,23 @@ export function analisarRestricaoMareNavio(
 
   let resumoAlerta = '';
   if (atracacaoAnalise && !atracacaoAnalise.seguro && desatracacaoAnalise && !desatracacaoAnalise.seguro) {
-    resumoAlerta = `Atracação e Desatracação em Baixa-mar (UKC < ${UKC_MINIMO_REGULAMENTAR}m)`;
+    resumoAlerta = `Atracação (${caladoEntrada}m) e Desatracação (${caladoSaida}m) em Baixa-mar`;
   } else if (atracacaoAnalise && !atracacaoAnalise.seguro) {
-    resumoAlerta = `Atracação em Baixa-mar (UKC ${atracacaoAnalise.ukcCalculado.toFixed(2)}m)`;
+    resumoAlerta = `Atracação em Baixa-mar (${caladoEntrada}m, UKC ${atracacaoAnalise.ukcCalculado.toFixed(2)}m) • Desatracação Segura (${caladoSaida}m)`;
   } else if (desatracacaoAnalise && !desatracacaoAnalise.seguro) {
-    resumoAlerta = `Desatracação em Baixa-mar (UKC ${desatracacaoAnalise.ukcCalculado.toFixed(2)}m)`;
+    resumoAlerta = `Desatracação em Baixa-mar (${caladoSaida}m, UKC ${desatracacaoAnalise.ukcCalculado.toFixed(2)}m) • Atracação Segura (${caladoEntrada}m)`;
   }
 
   return {
     temRestricao: Boolean(temInseguranca),
-    calado,
+    calado: caladoMaximo,
+    caladoEntrada,
+    caladoSaida,
     profundidadeBercoZh: PROFUNDIDADE_BERCO_ZH,
     ukcMinimoExigido: UKC_MINIMO_REGULAMENTAR,
-    mareMinimaRequerida,
+    mareMinimaRequerida: mareMinimaGeral,
+    mareMinimaRequeridaEntrada: mareMinimaEntrada,
+    mareMinimaRequeridaSaida: mareMinimaSaida,
     atracacao: atracacaoAnalise,
     desatracacao: desatracacaoAnalise,
     resumoAlerta: resumoAlerta || undefined

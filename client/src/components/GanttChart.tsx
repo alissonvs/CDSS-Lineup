@@ -3,7 +3,8 @@ import type {
   NavioLineup,
   ResumoOperacional,
   MaresResponse,
-  MilestoneMarker
+  MilestoneMarker,
+  TimelineBlock
 } from '../types';
 import {
   Ship,
@@ -40,6 +41,13 @@ interface HoveredMarcoInfo {
   y: number;
 }
 
+interface HoveredBlocoInfo {
+  navio: NavioLineup;
+  bloco: TimelineBlock;
+  x: number;
+  y: number;
+}
+
 interface GanttChartProps {
   navios: NavioLineup[];
   operacional: ResumoOperacional | null;
@@ -60,6 +68,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   const { isDark } = useTheme();
   const [hoveredNavio, setHoveredNavio] = useState<NavioLineup | null>(null);
   const [hoveredMarco, setHoveredMarco] = useState<HoveredMarcoInfo | null>(null);
+  const [hoveredBloco, setHoveredBloco] = useState<HoveredBlocoInfo | null>(null);
 
   // Escala Temporal Selecionada (7D / 14D / 28D) controlada pelo CCO Header
   const currentScale = scaleDays ?? 7;
@@ -288,71 +297,23 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   key={`block-${navio.id}-${bIdx}`}
                   onClick={onSelectNavio ? () => onSelectNavio(navio) : undefined}
                   title={`${bloco.label} (${bloco.duracaoHoras}h)`}
-                  className={`absolute h-9 top-0 border flex items-center justify-center px-2 text-xs font-bold transition-all z-10 hover:brightness-110 overflow-hidden ${roundedClass} ${blockStyle} ${ultraShortStyle} ${onSelectNavio ? 'cursor-pointer' : 'cursor-default'}`}
+                  onMouseEnter={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setHoveredBloco({
+                      navio,
+                      bloco,
+                      x: rect.left + rect.width / 2,
+                      y: rect.top
+                    });
+                  }}
+                  onMouseLeave={() => setHoveredBloco(null)}
+                  className={`absolute h-9 top-0 border flex items-center justify-center px-1 transition-all z-10 hover:brightness-110 overflow-hidden ${roundedClass} ${blockStyle} ${ultraShortStyle} ${onSelectNavio ? 'cursor-pointer' : 'cursor-default'}`}
                   style={{
                     left: `${leftPct}%`,
                     width: `${widthPct}%`,
                     minWidth: '10px'
                   }}
                 >
-                  {isUltraShort ? null : bloco.tipo === 'PREVISTO_FUNDEIO' || bloco.tipo === 'LARANJA' ? (
-                    blockPx >= 140 ? (
-                      <span className="tracking-tight text-xs font-black whitespace-nowrap text-center">
-                        PREVISTO SISPORT ➔ FUNDEIO
-                      </span>
-                    ) : blockPx >= 70 ? (
-                      <span className="tracking-tight text-[10px] font-extrabold truncate text-center w-full">
-                        SISPORT ➔ FUNDEIO
-                      </span>
-                    ) : (
-                      <span className="tracking-tight text-[9.5px] font-extrabold text-center w-full truncate">
-                        PREVISTO
-                      </span>
-                    )
-                  ) : bloco.tipo === 'FUNDEADO_OPERACAO' || bloco.tipo === 'VERMELHO' ? (
-                    blockPx >= 140 ? (
-                      <span className="tracking-tight text-xs font-black whitespace-nowrap text-center">
-                        ⚓ FUNDEADO ➔ INÍCIO OPERAÇÃO
-                      </span>
-                    ) : blockPx >= 70 ? (
-                      <span className="tracking-tight text-[10px] font-extrabold truncate text-center w-full">
-                        ⚓ FUNDEADO ➔ OP
-                      </span>
-                    ) : (
-                      <span className="tracking-tight text-[9.5px] font-extrabold text-center w-full truncate">
-                        ⚓ FUNDEADO
-                      </span>
-                    )
-                  ) : navio.origem_previsao_fim === 'PRATICAGEM' ? (
-                    blockPx >= 140 ? (
-                      <span className="tracking-tight text-xs font-black whitespace-nowrap text-center flex items-center justify-center space-x-1" title={navio.manobra_praticagem_str || 'Desatracação confirmada pela Praticagem'}>
-                        <span>⚙ OP ➔ ⚓ DESATRAC. (PRATICAGEM)</span>
-                      </span>
-                    ) : blockPx >= 70 ? (
-                      <span className="tracking-tight text-[10px] font-extrabold truncate text-center w-full" title={navio.manobra_praticagem_str || 'Desatracação confirmada pela Praticagem'}>
-                        ⚓ OP ➔ PRATICAGEM
-                      </span>
-                    ) : (
-                      <span className="tracking-tight text-[9.5px] font-extrabold text-center w-full truncate" title={navio.manobra_praticagem_str || 'Desatracação confirmada pela Praticagem'}>
-                        ⚓ PRAT.
-                      </span>
-                    )
-                  ) : (
-                    blockPx >= 140 ? (
-                      <span className="tracking-tight text-xs font-black whitespace-nowrap text-center">
-                        ⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO
-                      </span>
-                    ) : blockPx >= 70 ? (
-                      <span className="tracking-tight text-[10px] font-extrabold truncate text-center w-full">
-                        ⚙ INÍCIO OP ➔ DESATRAC.
-                      </span>
-                    ) : (
-                      <span className="tracking-tight text-[9.5px] font-extrabold text-center w-full truncate">
-                        ⚙ OPERAÇÃO
-                      </span>
-                    )
-                  )}
-
                   {overflowsRight && (
                     <span
                       className="absolute right-1 top-1/2 -translate-y-1/2 font-black text-[10px] text-white/95 drop-shadow pointer-events-none select-none tracking-tighter"
@@ -869,10 +830,17 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           className={`font-semibold flex items-center space-x-0.5 ${
                             navio.restricao_mare?.temRestricao ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-blue-700 dark:text-cyan-300'
                           }`}
-                          title={navio.restricao_mare?.resumoAlerta}
+                          title={
+                            navio.restricao_mare?.resumoAlerta ||
+                            `Calado Entrada: ${navio.calado_entrada || navio.calado || '-'}m | Calado Saída: ${navio.calado_saida || navio.calado || '-'}m`
+                          }
                         >
                           {navio.restricao_mare?.temRestricao && <span>🌊⚠️</span>}
-                          <span>Cal. {navio.calado ? `${Number(navio.calado).toFixed(2)}m` : '-'}</span>
+                          <span>
+                            {navio.calado_entrada && navio.calado_saida && Math.abs(navio.calado_entrada - navio.calado_saida) > 0.1
+                              ? `Cal. E:${Number(navio.calado_entrada).toFixed(1)}/S:${Number(navio.calado_saida).toFixed(1)}m`
+                              : `Cal. ${navio.calado ? `${Number(navio.calado).toFixed(1)}m` : '-'}`}
+                          </span>
                         </span>
                         <span className="text-slate-300 dark:text-slate-600">&bull;</span>
                         <span className="text-slate-700 dark:text-slate-300">LOA {navio.loa}m</span>
@@ -1048,6 +1016,12 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                             {navio.fim_atracacao ? new Date(navio.fim_atracacao).toLocaleDateString('pt-BR') : '-'}
                           </span>
                         </div>
+                        <div className="col-span-2 pt-1 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-[10.5px]">
+                          <span className="text-slate-500 dark:text-slate-400 text-[10px]">Calados (Entrada • Saída):</span>
+                          <span className="text-blue-700 dark:text-cyan-300 font-semibold">
+                            Entrada: {navio.calado_entrada ? `${Number(navio.calado_entrada).toFixed(1)}m` : `${navio.calado || '-'}m`} • Saída: {navio.calado_saida ? `${Number(navio.calado_saida).toFixed(1)}m` : `${navio.calado || '-'}m`}
+                          </span>
+                        </div>
                         {isOperating && navio.progresso_operacao !== undefined && navio.progresso_operacao !== null && (
                           <div className="col-span-2 pt-1.5 border-t border-slate-200 dark:border-slate-700/60">
                             <div className="flex items-center justify-between text-[10.5px] font-mono">
@@ -1113,8 +1087,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 
                     if (!isFuture) return null;
 
-                    const calado = navio.calado || 0;
-                    const isRestritoCalado = calado > 9.50;
+                    const caladoEntrada = navio.calado_entrada ?? navio.calado ?? 0;
+                    const isRestritoCalado = navio.restricao_mare?.temRestricao ?? (caladoEntrada > 9.50);
                     const dataFormatada = navio.inicio_atracacao
                       ? new Date(navio.inicio_atracacao).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
                       : navio.eta_previsto
@@ -1125,7 +1099,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       return (
                         <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none flex items-center space-x-1.5 bg-red-50 border border-red-300 text-red-800 dark:bg-red-950/80 dark:border-red-500/70 px-2.5 py-1 rounded text-[11px] dark:text-red-200 shadow-md backdrop-blur-sm animate-pulse">
                           <span className="text-amber-500 font-bold text-xs">⚠️</span>
-                          <span className="font-semibold text-red-700 dark:text-red-300">Restrito por Calado ({calado.toFixed(1)}m):</span>
+                          <span className="font-semibold text-red-700 dark:text-red-300">
+                            {navio.restricao_mare?.resumoAlerta ? 'Restrição de Maré (DHN)' : `Restrito por Calado (${caladoEntrada.toFixed(1)}m)`}:
+                          </span>
                           <strong className="text-slate-900 dark:text-white font-mono font-bold">{dataFormatada}</strong>
                         </div>
                       );
@@ -1351,6 +1327,158 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* Tooltip Rico Flutuante dos Blocos ao Passar o Mouse na Barra */}
+    {hoveredBloco && (() => {
+      const isNearTop = hoveredBloco.y < 190;
+      const b = hoveredBloco.bloco;
+      const isPraticagem = hoveredBloco.navio.origem_previsao_fim === 'PRATICAGEM';
+      const isLaranja = b.tipo === 'PREVISTO_FUNDEIO' || b.tipo === 'LARANJA';
+      const isVermelho = b.tipo === 'FUNDEADO_OPERACAO' || b.tipo === 'VERMELHO';
+
+      const etapaIcon = isLaranja ? '🗓️' : isVermelho ? '⚓' : isPraticagem ? '⚓' : '⚙️';
+      const etapaTitulo = isLaranja
+        ? 'Previsão SISPORT ➔ Entrada em Espera'
+        : isVermelho
+        ? 'Fundeado na Barra ➔ Início de Operação'
+        : isPraticagem
+        ? 'Operação no Berço ➔ Saída Confirmada (Praticagem)'
+        : 'Operação no Berço ➔ Desatracação (PMD)';
+
+      const etapaBadge = isLaranja
+        ? { bg: 'bg-amber-950/80 border-amber-600/60 text-amber-300', label: 'Espera Prevista' }
+        : isVermelho
+        ? { bg: 'bg-rose-950/80 border-rose-600/60 text-rose-300', label: 'Fundeio Real' }
+        : isPraticagem
+        ? { bg: 'bg-purple-950/80 border-purple-500/60 text-purple-300', label: 'Praticagem SP' }
+        : { bg: 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300', label: 'Berço CDSS' };
+
+      return (
+        <div
+          className={`fixed z-[100] pointer-events-none transform -translate-x-1/2 transition-all duration-75 ${
+            isNearTop ? 'mt-2' : '-translate-y-full mb-2'
+          }`}
+          style={{
+            left: `${Math.max(140, Math.min(window.innerWidth - 140, hoveredBloco.x))}px`,
+            top: `${isNearTop ? hoveredBloco.y + 42 : hoveredBloco.y - 6}px`
+          }}
+        >
+          <div className="bg-slate-900/98 dark:bg-[#0b1322]/98 text-white border border-slate-700/80 dark:border-slate-600/80 rounded-xl p-3 shadow-2xl backdrop-blur-md min-w-[260px] max-w-sm ring-1 ring-white/10 animate-in fade-in zoom-in-95 duration-150">
+            {/* Seta do tooltip */}
+            {isNearTop ? (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-[1px] border-[6px] border-transparent border-b-slate-900/98 dark:border-b-[#0b1322]/98" />
+            ) : (
+              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-[1px] border-[6px] border-transparent border-t-slate-900/98 dark:border-t-[#0b1322]/98" />
+            )}
+
+            {/* Cabeçalho do Bloco */}
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800 dark:border-slate-700/70">
+              <div className="flex items-center space-x-2 min-w-0 flex-1">
+                <span className="text-base leading-none">{etapaIcon}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="font-black text-xs text-white block truncate tracking-tight">
+                    {etapaTitulo}
+                  </span>
+                  <span className="text-[10.5px] text-slate-300 font-semibold block truncate">
+                    {hoveredBloco.navio.nome_navio} <span className="text-slate-400 font-normal">({hoveredBloco.navio.ordem_fila}º da fila)</span>
+                  </span>
+                </div>
+              </div>
+              <span className={`text-[9.5px] font-mono font-bold px-2 py-0.5 rounded border ml-2 shrink-0 ${etapaBadge.bg}`}>
+                {etapaBadge.label}
+              </span>
+            </div>
+
+            {/* Duração & Período Formatados */}
+            <div className="mt-2.5 bg-slate-950/80 rounded-lg p-2.5 border border-slate-800 space-y-1.5 font-mono text-[11px]">
+              <div className="flex items-center justify-between text-slate-400">
+                <span>Duração da Etapa:</span>
+                <span className="font-bold text-cyan-300 text-xs">{hoveredBloco.bloco.duracaoHoras}h</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-300 pt-1 border-t border-slate-800/80">
+                <span className="text-[10px] text-slate-400">Início:</span>
+                <span className="font-semibold text-slate-200">{formatarDataHoraCompleta(hoveredBloco.bloco.inicioIso)}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-300">
+                <span className="text-[10px] text-slate-400">Término:</span>
+                <span className="font-semibold text-slate-200">{formatarDataHoraCompleta(hoveredBloco.bloco.fimIso)}</span>
+              </div>
+            </div>
+
+            {/* Calado Náutico da Manobra / Operação */}
+            <div className="mt-2.5 bg-slate-950/80 rounded-lg p-2 border border-slate-800 text-[10.5px] font-mono flex items-center justify-between">
+              <span className="text-slate-400">Calados Náuticos:</span>
+              <span className="text-cyan-300 font-semibold">
+                Entrada: {hoveredBloco.navio.calado_entrada ? `${Number(hoveredBloco.navio.calado_entrada).toFixed(1)}m` : `${hoveredBloco.navio.calado || '-'}m`} • Saída: {hoveredBloco.navio.calado_saida ? `${Number(hoveredBloco.navio.calado_saida).toFixed(1)}m` : '-'}
+              </span>
+            </div>
+
+            {hoveredBloco.navio.restricao_mare?.temRestricao && (
+              <div className="mt-1.5 bg-amber-950/60 rounded p-1.5 border border-amber-600/50 text-[10px] text-amber-300 flex items-center space-x-1.5">
+                <span>🌊⚠️</span>
+                <span className="truncate">{hoveredBloco.navio.restricao_mare.resumoAlerta}</span>
+              </div>
+            )}
+
+            {/* Contexto Operacional Específico */}
+            {isPraticagem && hoveredBloco.navio.manobra_praticagem_str && (
+              <div className="mt-2 text-purple-300 text-[10px] font-mono bg-purple-950/40 p-1.5 rounded border border-purple-800/50 flex items-start space-x-1.5">
+                <span>⚓</span>
+                <span className="leading-tight">{hoveredBloco.navio.manobra_praticagem_str}</span>
+              </div>
+            )}
+
+            {/* Progresso Operacional & Run-Rate Real para Navio em Operação */}
+            {!isLaranja && !isVermelho && hoveredBloco.navio.status_cor === 'VERDE' && hoveredBloco.navio.progresso_operacao !== null && hoveredBloco.navio.progresso_operacao !== undefined && (
+              <div className="mt-2.5 bg-emerald-950/40 rounded-lg p-2.5 border border-emerald-800/60 font-mono text-[11px] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-emerald-300 font-bold flex items-center gap-1">
+                    <span>⚡</span> Progresso Real do Cais:
+                  </span>
+                  <span className="font-bold text-white bg-emerald-600/80 px-1.5 py-0.5 rounded text-[10px]">
+                    {Number(hoveredBloco.navio.progresso_operacao).toFixed(1)}%
+                  </span>
+                </div>
+
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-emerald-400 h-full transition-all duration-300 rounded-full"
+                    style={{ width: `${Math.min(100, Math.max(0, Number(hoveredBloco.navio.progresso_operacao)))}%` }}
+                  />
+                </div>
+
+                {hoveredBloco.navio.volume_restante_t !== undefined && (
+                  <div className="flex items-center justify-between text-slate-300 pt-0.5">
+                    <span className="text-[10px] text-slate-400">Volume Restante:</span>
+                    <span className="font-semibold text-emerald-200">
+                      {hoveredBloco.navio.volume_restante_t.toLocaleString('pt-BR')} t de {(hoveredBloco.navio.volume_t || 0).toLocaleString('pt-BR')} t
+                    </span>
+                  </div>
+                )}
+
+                {hoveredBloco.navio.taxa_efetiva_t_hora !== undefined && hoveredBloco.navio.taxa_efetiva_t_hora > 0 && (
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span className="text-[10px] text-slate-400">Ritmo Efetivo:</span>
+                    <span className="font-semibold text-emerald-200">
+                      ~{hoveredBloco.navio.taxa_efetiva_t_hora.toLocaleString('pt-BR')} t/h ({(hoveredBloco.navio.taxa_efetiva_t_hora * 24).toLocaleString('pt-BR')} t/dia)
+                    </span>
+                  </div>
+                )}
+
+                {hoveredBloco.navio.tempo_restante_horas !== undefined && (
+                  <div className="flex items-center justify-between text-slate-300 pt-1 border-t border-emerald-800/40">
+                    <span className="text-[10px] text-slate-400">Tempo Restante Estimado:</span>
+                    <span className="font-bold text-cyan-300">
+                      ~{hoveredBloco.navio.tempo_restante_horas}h
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       );

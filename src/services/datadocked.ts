@@ -13,8 +13,8 @@ const MOCK_VESSELS_DATABASE: Record<string, DataDockedVesselResult> = {
     calado: 9.2,
     agencia: 'Wilson Sons Agência',
     eta_previsto: '2026-09-15T12:00:00',
-    latitude: -23.8242,
-    longitude: -45.3931,
+    latitude: -23.8112,
+    longitude: -45.3971,
     status_sugerido: 'VERDE'
   },
   '9345672': {

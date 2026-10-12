@@ -109,12 +109,14 @@ export async function createNavioHandler(req: Request, res: Response): Promise<v
 
     const [inserted] = await sql`
       INSERT INTO lineup_navios (
-        imo, nome_navio, tipo_navio, mercadoria, volume_t, loa, dwt, calado, agencia,
+        imo, nome_navio, tipo_navio, mercadoria, volume_t, loa, dwt, calado, calado_entrada, calado_saida, agencia,
         ordem_fila, status_cor, livre_pratica_ok, armazem_publico, eta_previsto, eta_ais, inicio_operacao,
         chegada_fundeio, inicio_atracacao, fim_atracacao, latitude, longitude, progresso_operacao
       ) VALUES (
         ${imo}, ${nomeNavio}, ${tipoNavio || 'Graneleiro Handymax'}, ${body.mercadoria.trim()},
         ${Number(body.volume_t)}, ${loa || 170.0}, ${dwt || 25000}, ${calado || 8.5},
+        ${body.calado_entrada !== undefined && body.calado_entrada !== null ? Number(body.calado_entrada) : (calado || 8.5)},
+        ${body.calado_saida !== undefined && body.calado_saida !== null ? Number(body.calado_saida) : (calado || 8.5)},
         ${body.agencia?.trim() || 'Agência Local'}, ${Number(ordem)}, ${statusCor},
         ${body.livre_pratica_ok ? 1 : 0}, ${body.armazem_publico ? 1 : 0},
         ${body.eta_previsto || null}, ${body.eta_ais || null}, ${inicioOperacao},
@@ -220,6 +222,8 @@ export async function updateNavioHandler(req: Request, res: Response): Promise<v
         loa = ${body.loa !== undefined ? Number(body.loa) : existing.loa},
         dwt = ${body.dwt !== undefined ? Number(body.dwt) : existing.dwt},
         calado = ${(body.calado !== undefined ? Number(body.calado) : existing.calado) ?? null},
+        calado_entrada = ${(body.calado_entrada !== undefined ? (body.calado_entrada !== null ? Number(body.calado_entrada) : null) : existing.calado_entrada) ?? null},
+        calado_saida = ${(body.calado_saida !== undefined ? (body.calado_saida !== null ? Number(body.calado_saida) : null) : existing.calado_saida) ?? null},
         agencia = ${(body.agencia ?? existing.agencia) ?? null},
         status_cor = ${statusCor},
         livre_pratica_ok = ${livrePratica},

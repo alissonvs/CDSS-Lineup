@@ -34,6 +34,8 @@ export const NavioModal: React.FC<NavioModalProps> = ({
     loa: 170.0,
     dwt: 25000,
     calado: 8.5,
+    calado_entrada: 8.5,
+    calado_saida: 6.2,
     agencia: '',
     status_cor: 'LARANJA',
     livre_pratica_ok: 0,
@@ -60,12 +62,26 @@ export const NavioModal: React.FC<NavioModalProps> = ({
         ? navioParaEditar.inicio_operacao.slice(0, 16)
         : (navioParaEditar.eta_ais ? navioParaEditar.eta_ais.slice(0, 16) : '');
 
+      const isGado = (navioParaEditar.mercadoria?.toLowerCase().includes('boi') ||
+        navioParaEditar.tipo_navio?.toLowerCase().includes('boi') ||
+        navioParaEditar.tipo_navio?.toLowerCase().includes('gado'));
+
+      const defaultEntrada = navioParaEditar.calado_entrada ?? navioParaEditar.calado;
+      const defaultSaida = navioParaEditar.calado_saida ?? (
+        isGado
+          ? navioParaEditar.calado
+          : (navioParaEditar.calado ? Math.max(5.8, Math.min(6.8, Number((navioParaEditar.calado - 3.4).toFixed(1)))) : undefined)
+      );
+
       setFormData({
         ...navioParaEditar,
         inicio_operacao: inicioOp,
         eta_previsto: navioParaEditar.eta_previsto ? navioParaEditar.eta_previsto.slice(0, 16) : '',
         chegada_fundeio: navioParaEditar.chegada_fundeio ? navioParaEditar.chegada_fundeio.slice(0, 16) : '',
-        eta_ais: navioParaEditar.eta_ais ? navioParaEditar.eta_ais.slice(0, 16) : ''
+        eta_ais: navioParaEditar.eta_ais ? navioParaEditar.eta_ais.slice(0, 16) : '',
+        calado: navioParaEditar.calado,
+        calado_entrada: defaultEntrada,
+        calado_saida: defaultSaida
       });
     } else {
       setFormData({
@@ -77,6 +93,8 @@ export const NavioModal: React.FC<NavioModalProps> = ({
         loa: 175.0,
         dwt: 28000,
         calado: 9.0,
+        calado_entrada: 9.0,
+        calado_saida: 6.2,
         agencia: '',
         status_cor: 'LARANJA',
         livre_pratica_ok: 0,
@@ -110,13 +128,16 @@ export const NavioModal: React.FC<NavioModalProps> = ({
 
     try {
       const vessel = await searchNavioCatalogo(nome);
+      const caladoNum = vessel.calado ? Number(vessel.calado.toFixed(1)) : undefined;
       setFormData((prev) => ({
         ...prev,
         imo: vessel.imo,
         tipo_navio: vessel.tipo_cdss || vessel.vessel_type || prev.tipo_navio,
         loa: vessel.loa || prev.loa,
         dwt: vessel.dwt || prev.dwt,
-        calado: vessel.calado ? Number(vessel.calado.toFixed(1)) : prev.calado
+        calado: caladoNum ?? prev.calado,
+        calado_entrada: caladoNum ?? prev.calado_entrada ?? prev.calado,
+        calado_saida: prev.calado_saida ?? (caladoNum ? Math.max(5.8, Math.min(6.8, Number((caladoNum - 3.4).toFixed(1)))) : prev.calado_saida)
       }));
       setCatalogoMessage(`IMO ${vessel.imo} identificado no Catálogo Oficial (${vessel.name || vessel.nome})!`);
     } catch (err) {
@@ -146,6 +167,8 @@ export const NavioModal: React.FC<NavioModalProps> = ({
           ? prev.inicio_operacao
           : (novoEtaAis || '');
 
+        const vesselCalado = vessel.calado ? Number(vessel.calado.toFixed(1)) : undefined;
+
         return {
           ...prev,
           nome_navio: prev.nome_navio || vessel.nome_navio,
@@ -155,7 +178,9 @@ export const NavioModal: React.FC<NavioModalProps> = ({
           agencia: prev.agencia || vessel.agencia,
           loa: prev.loa || vessel.loa,
           dwt: prev.dwt || vessel.dwt,
-          calado: prev.calado || (vessel.calado ? Number(vessel.calado.toFixed(1)) : undefined),
+          calado: prev.calado || vesselCalado,
+          calado_entrada: prev.calado_entrada || vesselCalado || prev.calado,
+          calado_saida: prev.calado_saida ?? (vesselCalado ? Math.max(5.8, Math.min(6.8, Number((vesselCalado - 3.4).toFixed(1)))) : prev.calado_saida),
           eta_ais: novoEtaAis,
           inicio_operacao: novoInicioOp,
           latitude: vessel.latitude,
@@ -208,7 +233,16 @@ export const NavioModal: React.FC<NavioModalProps> = ({
     setError(null);
 
     try {
-      await onSave(formData);
+      const caladoPrincipal = formData.calado_entrada || formData.calado || 8.5;
+      const caladoEntrada = formData.calado_entrada || caladoPrincipal;
+      const caladoSaida = formData.calado_saida || caladoPrincipal;
+
+      await onSave({
+        ...formData,
+        calado: caladoPrincipal,
+        calado_entrada: caladoEntrada,
+        calado_saida: caladoSaida
+      });
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -412,17 +446,6 @@ export const NavioModal: React.FC<NavioModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">Calado Operacional (m)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={formData.calado || ''}
-                onChange={(e) => setFormData({ ...formData, calado: Number(e.target.value) })}
-                className="w-full bg-white dark:bg-cco-darkest border border-slate-300 dark:border-cco-border rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-200 font-mono focus:outline-none focus:border-blue-500"
-              />
-            </div>
-
-            <div>
               <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">Agência Marítima</label>
               <input
                 type="text"
@@ -430,6 +453,79 @@ export const NavioModal: React.FC<NavioModalProps> = ({
                 onChange={(e) => setFormData({ ...formData, agencia: e.target.value })}
                 className="w-full bg-white dark:bg-cco-darkest border border-slate-300 dark:border-cco-border rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-200 focus:outline-none focus:border-blue-500"
               />
+            </div>
+
+            {/* Calados Náuticos Operacionais (Duplo Calado: Entrada vs. Saída) */}
+            <div className="col-span-1 md:col-span-2 bg-slate-50 dark:bg-cco-darkest p-3.5 rounded-xl border border-slate-200 dark:border-cco-border space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-slate-800 dark:text-slate-200 font-bold flex items-center space-x-2 text-xs">
+                  <span>🌊 Calados Náuticos Operacionais</span>
+                </label>
+                <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono bg-cyan-50 dark:bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-200 dark:border-cyan-500/30">
+                  Tábua DHN & Praticagem
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1 text-[11px]">
+                    Calado Entrada / Atracação (m) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={formData.calado_entrada ?? formData.calado ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? undefined : Number(e.target.value);
+                      setFormData((prev) => {
+                        const isGado = (prev.mercadoria?.toLowerCase().includes('boi') ||
+                          prev.tipo_navio?.toLowerCase().includes('boi') ||
+                          prev.tipo_navio?.toLowerCase().includes('gado'));
+                        const autoSaida = prev.calado_saida ?? (
+                          val !== undefined
+                            ? (isGado ? val : Math.max(5.8, Math.min(6.8, Number((val - 3.4).toFixed(1)))))
+                            : undefined
+                        );
+                        return {
+                          ...prev,
+                          calado: val,
+                          calado_entrada: val,
+                          calado_saida: autoSaida
+                        };
+                      });
+                    }}
+                    placeholder="Ex: 8.5"
+                    className="w-full bg-white dark:bg-cco-panel border border-slate-300 dark:border-cco-border rounded-lg px-3 py-1.5 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500 text-xs"
+                  />
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                    Calado na chegada carregado
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1 text-[11px]">
+                    Calado Saída / Desatracação (m)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={formData.calado_saida ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? undefined : Number(e.target.value);
+                      setFormData({ ...formData, calado_saida: val });
+                    }}
+                    placeholder="Ex: 6.2 (lastro)"
+                    className="w-full bg-white dark:bg-cco-panel border border-slate-300 dark:border-cco-border rounded-lg px-3 py-1.5 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500 text-xs"
+                  />
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                    Calado na partida (em lastro para descarga)
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-snug">
+                Permite janelas de maré diferenciadas na atracação e desatracação, eliminando falsos alertas de encalhe após descarregar no berço.
+              </p>
             </div>
           </div>
 
@@ -478,7 +574,7 @@ export const NavioModal: React.FC<NavioModalProps> = ({
               </div>
             </div>
 
-            {/* Novo Campo: Início da Operação */}
+            {/* Campo: Início da Operação */}
             <div className="bg-slate-50 dark:bg-cco-darkest p-3 rounded-xl border border-blue-200 dark:border-blue-500/40 space-y-1.5 transition-colors">
               <div className="flex items-center justify-between">
                 <label className="block text-slate-800 dark:text-slate-200 font-bold text-xs">
@@ -496,6 +592,47 @@ export const NavioModal: React.FC<NavioModalProps> = ({
               />
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Se este campo estiver vazio, ele é preenchido automaticamente com a previsão do <strong>AIS</strong>. Caso já tenha informações, elas são mantidas. Pode ser editado manualmente a qualquer momento.
+              </p>
+            </div>
+
+            {/* Campo: Progresso da Operação no Cais (Run-Rate Efetivo) */}
+            <div className="bg-slate-50 dark:bg-cco-darkest p-3 rounded-xl border border-emerald-200 dark:border-emerald-500/40 space-y-2 transition-colors">
+              <div className="flex items-center justify-between">
+                <label className="block text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5">
+                  <span>⚡</span> Progresso da Operação no Cais (%)
+                </label>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                  {formData.progresso_operacao !== null && formData.progresso_operacao !== undefined
+                    ? `${Number(formData.progresso_operacao).toFixed(1)}% Concluído`
+                    : 'Não informado (0%)'}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  placeholder="Ex: 45.0"
+                  value={formData.progresso_operacao !== null && formData.progresso_operacao !== undefined ? formData.progresso_operacao : ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? null : Number(e.target.value);
+                    setFormData({ ...formData, progresso_operacao: val });
+                  }}
+                  className="w-28 bg-white dark:bg-cco-panel border border-slate-300 dark:border-cco-border rounded-lg px-3 py-1.5 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500 text-xs"
+                />
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={formData.progresso_operacao || 0}
+                  onChange={(e) => setFormData({ ...formData, progresso_operacao: Number(e.target.value) })}
+                  className="flex-1 accent-emerald-500 cursor-pointer"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Lido da programação oficial do <strong>SISPORT</strong> ou ajustado manualmente com base no boletim de turno. O motor calcula o tempo restante de desatracação e atualiza a fila de espera em tempo real.
               </p>
             </div>
           </div>

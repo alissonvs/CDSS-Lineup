@@ -387,9 +387,9 @@ export async function sincronizarComSisportOficial(): Promise<{
       latitude = existing.latitude;
       longitude = existing.longitude;
     } else if (statusCor === 'VERDE') {
-      // Navio atracado sem coordenadas prévias: berço comercial de São Sebastião
-      latitude = -23.8045;
-      longitude = -45.3970;
+      // Navio atracado sem coordenadas prévias: berço comercial de São Sebastião (CDSS)
+      latitude = -23.8112;
+      longitude = -45.3971;
     } else {
       // Navio novo sem coordenadas prévias: atribui ponto de fundeio inicial
       latitude = fundeiosCoords[i % fundeiosCoords.length].lat;

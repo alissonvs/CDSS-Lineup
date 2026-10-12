@@ -16,6 +16,8 @@ export async function initializeDatabase(): Promise<void> {
         loa DOUBLE PRECISION NOT NULL,                    -- Comprimento Total (metros)
         dwt DOUBLE PRECISION NOT NULL,                    -- Porte Bruto / TPB (toneladas)
         calado DOUBLE PRECISION DEFAULT 8.5,
+        calado_entrada DOUBLE PRECISION,
+        calado_saida DOUBLE PRECISION,
         agencia TEXT,
         ordem_fila INTEGER NOT NULL,                      -- Prioridade sequencial no berço (1, 2, 3...)
         
@@ -171,7 +173,20 @@ export async function initializeDatabase(): Promise<void> {
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS manobra_praticagem_id INTEGER`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS manobra_praticagem_str TEXT`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS ajuste_praticagem_ativo INTEGER DEFAULT 1`;
+    await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS calado_entrada DOUBLE PRECISION`;
+    await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS calado_saida DOUBLE PRECISION`;
 
+    // Inicialização retroativa: popula calados de entrada e saída a partir de calado
+    await sql`
+      UPDATE lineup_navios
+      SET calado_entrada = COALESCE(calado_entrada, calado, 8.5)
+      WHERE calado_entrada IS NULL;
+    `;
+    await sql`
+      UPDATE lineup_navios
+      SET calado_saida = COALESCE(calado_saida, calado, 8.5)
+      WHERE calado_saida IS NULL;
+    `;
 
     // Regra: se inicio_operacao estiver vazio, preenche inicialmente com as informações de data e hora do AIS (eta_ais)
     await sql`
@@ -245,8 +260,8 @@ export async function initializeDatabase(): Promise<void> {
         chegada_fundeio: '2026-09-15T17:00:00',
         inicio_atracacao: '2026-09-16T08:00:00',
         fim_atracacao: '2026-09-18T18:00:00',
-        latitude: -23.8242,
-        longitude: -45.3931
+        latitude: -23.8112,
+        longitude: -45.3971
       },
       {
         imo: '9345672',

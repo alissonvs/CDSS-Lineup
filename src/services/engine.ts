@@ -6,7 +6,11 @@ import {
   TimelineBlock
 } from '../types/index.js';
 import { obterHorasChuva } from './weather.js';
-import { analisarRestricaoMareNavio, sincronizarTabuaMaresNoBanco } from './tideService.js';
+import {
+  analisarRestricaoMareNavio,
+  sincronizarTabuaMaresNoBanco,
+  obterCaladosOperacionaisNavio
+} from './tideService.js';
 
 const DELTA_T_MANOBRA = 2.0; // Constante regulamentar CDSS (2,0 horas de folga de manobra)
 
@@ -91,6 +95,152 @@ export async function calcularDuracaoNavio(
 }
 
 /**
+ * Calcula a desatracação dinâmica de um navio em operação no berço (status_cor = 'VERDE')
+ * com base no progresso percentual real, volume remanescente e ritmo operacional efetivo (Run-Rate)
+ */
+export async function calcularDesatracacaoDinamicaNavioVerde(
+  navio: NavioLineup,
+  pranchas: Record<string, PranchaProdutividade>,
+  berthedAtMs: number,
+  agora: Date
+): Promise<{
+  etdProjetadoMs: number;
+  duracaoBaseHoras: number;
+  horasChuva: number;
+  duracaoTotalHoras: number;
+  volumeRestanteT: number;
+  taxaEfetivaTHora: number;
+  tempoRestanteHoras: number;
+  metodo: 'PROGRESSO_REAL' | 'TEORICO';
+}> {
+  const merc = (navio.mercadoria || '').toLowerCase();
+  let prancha: PranchaProdutividade | undefined;
+
+  for (const [k, v] of Object.entries(pranchas)) {
+    if (k.toLowerCase() === merc || merc.includes(k.toLowerCase()) || k.toLowerCase().includes(merc)) {
+      prancha = v;
+      break;
+    }
+  }
+
+  if (!prancha) {
+    if (merc.includes('animais') || merc.includes('vivos') || merc.includes('viva')) {
+      prancha = {
+        mercadoria: 'Animais Vivos',
+        prancha_minima_dia: 2200,
+        pmd_historica: 2500,
+        sensivel_chuva: 0
+      };
+    } else if (merc.includes('cevada')) {
+      prancha = {
+        mercadoria: 'Cevada',
+        prancha_minima_dia: 2800,
+        pmd_historica: 3200,
+        sensivel_chuva: 1
+      };
+    } else {
+      prancha = pranchas['Carga Geral'] || {
+        mercadoria: navio.mercadoria,
+        prancha_minima_dia: 2000,
+        pmd_historica: 2200,
+        sensivel_chuva: 1
+      };
+    }
+  }
+
+  const pmdEfetiva = Math.max(prancha.pmd_historica, prancha.prancha_minima_dia);
+  const pmdHoraTeorica = pmdEfetiva / 24.0;
+  const volumeTotal = Math.max(1, navio.volume_t || 15000);
+
+  const progresso = (navio.progresso_operacao !== null && navio.progresso_operacao !== undefined)
+    ? Math.max(0, Math.min(100, Number(navio.progresso_operacao)))
+    : null;
+
+  const nowMs = agora.getTime();
+  const horasDecorridas = Math.max(0.5, (nowMs - berthedAtMs) / 3600000);
+
+  // Cenário 1: Navio com operação concluída ou em fase final de desamarração (>= 98%)
+  if (progresso !== null && progresso >= 98) {
+    const tempoResidualManobra = 1.5; // 1h30 para desamarração e desatracação
+    const etdMs = nowMs + tempoResidualManobra * 3600000;
+    const duracaoTotal = Math.round(((etdMs - berthedAtMs) / 3600000) * 10) / 10;
+    return {
+      etdProjetadoMs: etdMs,
+      duracaoBaseHoras: duracaoTotal,
+      horasChuva: 0,
+      duracaoTotalHoras: duracaoTotal,
+      volumeRestanteT: 0,
+      taxaEfetivaTHora: Math.round(pmdHoraTeorica * 10) / 10,
+      tempoRestanteHoras: tempoResidualManobra,
+      metodo: 'PROGRESSO_REAL'
+    };
+  }
+
+  // Cenário 2: Navio com progresso registrado (> 0% e < 98%)
+  if (progresso !== null && progresso > 0) {
+    const volumeOperado = (volumeTotal * progresso) / 100.0;
+    const volumeRestante = Math.max(0, volumeTotal - volumeOperado);
+
+    // Avaliação da taxa efetiva de operação (Run-Rate)
+    let taxaEfetiva = pmdHoraTeorica;
+    if (horasDecorridas >= 3.0 && progresso >= 5) {
+      const taxaObservada = volumeOperado / horasDecorridas;
+      // Ponderação suavizada: quanto mais tempo decorrido, mais representativa é a taxa observada
+      const alpha = Math.min(0.85, horasDecorridas / 24.0);
+      taxaEfetiva = alpha * taxaObservada + (1 - alpha) * pmdHoraTeorica;
+      // Clamping de salvaguarda operacional (entre 35% e 300% da PMD teórica)
+      taxaEfetiva = Math.max(pmdHoraTeorica * 0.35, Math.min(pmdHoraTeorica * 3.0, taxaEfetiva));
+    }
+
+    const duracaoRestanteBaseHoras = Math.round((volumeRestante / taxaEfetiva) * 10) / 10;
+
+    // Chuva futura projetada a partir de AGORA até o fim estimado da operação
+    let horasChuvaFutura = 0;
+    const fimEstimadoProvisorio = new Date(nowMs + (duracaoRestanteBaseHoras + DELTA_T_MANOBRA) * 3600000);
+    if (prancha.sensivel_chuva === 1) {
+      horasChuvaFutura = await obterHorasChuva(agora, fimEstimadoProvisorio);
+    }
+
+    const tempoRestanteTotalHoras = Math.round((duracaoRestanteBaseHoras + horasChuvaFutura + DELTA_T_MANOBRA) * 10) / 10;
+    const etdMs = nowMs + tempoRestanteTotalHoras * 3600000;
+    const duracaoTotalGeral = Math.round(((etdMs - berthedAtMs) / 3600000) * 10) / 10;
+
+    return {
+      etdProjetadoMs: etdMs,
+      duracaoBaseHoras: Math.round((volumeTotal / taxaEfetiva) * 10) / 10,
+      horasChuva: horasChuvaFutura,
+      duracaoTotalHoras: duracaoTotalGeral,
+      volumeRestanteT: Math.round(volumeRestante * 10) / 10,
+      taxaEfetivaTHora: Math.round(taxaEfetiva * 10) / 10,
+      tempoRestanteHoras: tempoRestanteTotalHoras,
+      metodo: 'PROGRESSO_REAL'
+    };
+  }
+
+  // Cenário 3: Fallback padrão (progresso = 0% ou não informado)
+  const duracaoBaseHoras = Math.round((volumeTotal / pmdHoraTeorica) * 10) / 10;
+  const fimProvisorio = new Date(berthedAtMs + (duracaoBaseHoras + DELTA_T_MANOBRA) * 3600000);
+  let horasChuva = 0;
+  if (prancha.sensivel_chuva === 1) {
+    horasChuva = await obterHorasChuva(new Date(berthedAtMs), fimProvisorio);
+  }
+  const tempoTotalHoras = duracaoBaseHoras + horasChuva + DELTA_T_MANOBRA;
+  const etdMs = berthedAtMs + Math.max(8, tempoTotalHoras) * 3600000;
+  const tempoRestante = Math.max(1, Math.round(((etdMs - nowMs) / 3600000) * 10) / 10);
+
+  return {
+    etdProjetadoMs: etdMs,
+    duracaoBaseHoras,
+    horasChuva,
+    duracaoTotalHoras: Math.round(tempoTotalHoras * 10) / 10,
+    volumeRestanteT: volumeTotal,
+    taxaEfetivaTHora: Math.round(pmdHoraTeorica * 10) / 10,
+    tempoRestanteHoras: tempoRestante,
+    metodo: 'TEORICO'
+  };
+}
+
+/**
  * Faz o parsing rigoroso de datas ISO para objetos Date no fuso UTC invariante
  */
 export function parseDateIso(str?: string | null): Date | null {
@@ -130,7 +280,7 @@ export async function recalcularLineupComMotor(): Promise<{
     praticagemManobras = await sql`
       SELECT id, sp_manobra_id, categoria, categoria_label, cor_fundo, nome_navio, imo,
              tipo_manobra, local_origem, local_destino, horario_str, horario_iso,
-             vinculo_lineup_imo
+             vinculo_lineup_imo, calado
       FROM praticagem_manobras
       ORDER BY id ASC
     `;
@@ -264,6 +414,18 @@ export async function recalcularLineupComMotor(): Promise<{
     );
     const manobraSaidaVerde = getManobraSaidaCais(navio);
 
+    // Integração de calados de entrada e saída informados na Praticagem
+    if (manobraAtracacaoVerde?.calado && !navio.calado_entrada) {
+      navio.calado_entrada = Number(manobraAtracacaoVerde.calado);
+    }
+    if (manobraSaidaVerde?.calado && !navio.calado_saida) {
+      navio.calado_saida = Number(manobraSaidaVerde.calado);
+    }
+    const caladosVerde = obterCaladosOperacionaisNavio(navio);
+    navio.calado_entrada = caladosVerde.caladoEntrada;
+    navio.calado_saida = caladosVerde.caladoSaida;
+    navio.calado = caladosVerde.caladoMaximo;
+
     if (navio.inicio_operacao) {
       const parsedInicioOp = parseDateIso(navio.inicio_operacao);
       if (parsedInicioOp) {
@@ -281,11 +443,16 @@ export async function recalcularLineupComMotor(): Promise<{
       }
     }
 
-    const { duracaoBaseHoras, horasChuva, tempoTotalHoras } = await calcularDuracaoNavio(
+    const resultadoDinamico = await calcularDesatracacaoDinamicaNavioVerde(
       navio,
       pranchas,
-      new Date(berthedAtMs)
+      berthedAtMs,
+      agora
     );
+
+    const duracaoBaseHoras = resultadoDinamico.duracaoBaseHoras;
+    const horasChuva = resultadoDinamico.horasChuva;
+    const tempoTotalHoras = resultadoDinamico.duracaoTotalHoras;
 
     // Duração de cais projetada / Desatracação prevista
     let etdProjetadoMs: number;
@@ -298,17 +465,21 @@ export async function recalcularLineupComMotor(): Promise<{
         navio.manobra_praticagem_id = manobraSaidaVerde.id;
         navio.manobra_praticagem_str = `Desatracação confirmada pela Praticagem em ${manobraSaidaVerde.horario_str}`;
       } else {
-        etdProjetadoMs = berthedAtMs + Math.max(8, tempoTotalHoras) * 3600000;
+        etdProjetadoMs = resultadoDinamico.etdProjetadoMs;
         navio.origem_previsao_fim = 'CALCULADO';
       }
     } else if (navio.origem_previsao_fim === 'MANUAL' && navio.fim_atracacao) {
       const parsedFim = parseDateIso(navio.fim_atracacao);
-      etdProjetadoMs = parsedFim ? parsedFim.getTime() : (berthedAtMs + Math.max(8, tempoTotalHoras) * 3600000);
+      etdProjetadoMs = parsedFim ? parsedFim.getTime() : resultadoDinamico.etdProjetadoMs;
       navio.origem_previsao_fim = 'MANUAL';
     } else {
-      etdProjetadoMs = berthedAtMs + Math.max(8, tempoTotalHoras) * 3600000;
+      etdProjetadoMs = resultadoDinamico.etdProjetadoMs;
       navio.origem_previsao_fim = 'CALCULADO';
     }
+
+    navio.volume_restante_t = resultadoDinamico.volumeRestanteT;
+    navio.taxa_efetiva_t_hora = resultadoDinamico.taxaEfetivaTHora;
+    navio.tempo_restante_horas = resultadoDinamico.tempoRestanteHoras;
 
     // Determinação precisa dos 4 Marcos Temporais do Navio no Berço
     // Marco 3 (Início Operação):
@@ -346,9 +517,13 @@ export async function recalcularLineupComMotor(): Promise<{
     });
 
     // Bloco 3: Verde (⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO)
+    const labelVerde = (navio.progresso_operacao !== null && navio.progresso_operacao !== undefined && Number(navio.progresso_operacao) > 0)
+      ? `⚙ EM OPERAÇÃO (${Number(navio.progresso_operacao).toFixed(0)}%) ➔ DESATRACAÇÃO`
+      : `⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO`;
+
     blocos.push({
       tipo: 'OPERACAO_DESATRACACAO',
-      label: `⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO`,
+      label: labelVerde,
       inicioIso: toIsoUtc(new Date(m3)),
       fimIso: toIsoUtc(new Date(m4)),
       duracaoHoras: duracaoBloco3,
@@ -396,8 +571,20 @@ export async function recalcularLineupComMotor(): Promise<{
       }
     }
 
-    // Verificar manobra de entrada no CAIS na Praticagem
+    // Verificar manobras de entrada e saída no CAIS na Praticagem
     const manobraEntrada = (navio.ajuste_praticagem_ativo ?? 1) !== 0 ? getManobraEntradaCais(navio) : null;
+    const manobraSaida = (navio.ajuste_praticagem_ativo ?? 1) !== 0 ? getManobraSaidaCais(navio) : null;
+
+    if (manobraEntrada?.calado && !navio.calado_entrada) {
+      navio.calado_entrada = Number(manobraEntrada.calado);
+    }
+    if (manobraSaida?.calado && !navio.calado_saida) {
+      navio.calado_saida = Number(manobraSaida.calado);
+    }
+    const caladosFila = obterCaladosOperacionaisNavio(navio);
+    navio.calado_entrada = caladosFila.caladoEntrada;
+    navio.calado_saida = caladosFila.caladoSaida;
+    navio.calado = caladosFila.caladoMaximo;
 
     let inicioOperacaoMs = cursorBercoMs;
     if (manobraEntrada && manobraEntrada.horario_iso) {
@@ -426,8 +613,6 @@ export async function recalcularLineupComMotor(): Promise<{
     );
 
     let fimOperacaoMs: number;
-    // Verificar se este navio na fila também possui manobra de saída (desatracação) agendada na Praticagem
-    const manobraSaida = (navio.ajuste_praticagem_ativo ?? 1) !== 0 ? getManobraSaidaCais(navio) : null;
 
     if (manobraSaida && manobraSaida.horario_iso) {
       const parsedSaida = parseDateIso(manobraSaida.horario_iso);
@@ -549,12 +734,15 @@ export async function recalcularLineupComMotor(): Promise<{
 
   naviosFilaProcessados.forEach((item, index) => {
     item.ordem_fila = navioVerdeProcessado ? index + 2 : index + 1;
+    const rest = analisarRestricaoMareNavio(item, item.inicio_atracacao, item.fim_atracacao);
+    item.restricao_mare = rest;
+
     const blocoOperacao = item.blocos?.find((b) => b.tipo === 'OPERACAO_DESATRACACAO' || b.tipo === 'AZUL');
     if (blocoOperacao) {
-      const caladoCritico = (item.calado || 0) > 9.50;
+      const caladoCritico = rest.temRestricao;
       blocoOperacao.caladoCritico = caladoCritico;
       blocoOperacao.label = caladoCritico
-        ? `⚠️ RESTRITO (>9.5m) • INÍCIO OP ➔ DESATRAC.`
+        ? `⚠️ RESTRITO (${rest.caladoEntrada}m) • INÍCIO OP ➔ DESATRAC.`
         : `⚙ INÍCIO OPERAÇÃO ➔ DESATRACAÇÃO`;
     }
     naviosProcessados.push(item);
@@ -565,13 +753,16 @@ export async function recalcularLineupComMotor(): Promise<{
     n.restricao_mare = analisarRestricaoMareNavio(n, n.inicio_atracacao, n.fim_atracacao);
   }
 
-  // 4. Persistir as janelas calculadas, status corrigido e ordem da fila diretamente no PostgreSQL
+  // 4. Persistir as janelas calculadas, status corrigido, calados e ordem da fila diretamente no PostgreSQL
   for (const n of naviosProcessados) {
     if (n.id) {
       await sql`
         UPDATE lineup_navios SET
           ordem_fila = ${n.ordem_fila},
           status_cor = ${n.status_cor},
+          calado = ${n.calado ?? null},
+          calado_entrada = ${n.calado_entrada ?? null},
+          calado_saida = ${n.calado_saida ?? null},
           inicio_atracacao = ${n.inicio_atracacao ?? null},
           fim_atracacao = ${n.fim_atracacao ?? null},
           chegada_fundeio = ${n.chegada_fundeio ?? null},

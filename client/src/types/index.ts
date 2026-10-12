@@ -34,6 +34,8 @@ export interface NavioLineup {
   loa: number;
   dwt: number;
   calado?: number;
+  calado_entrada?: number; // Calado na atracação (m)
+  calado_saida?: number; // Calado na desatracação (m)
   agencia?: string;
   ordem_fila: number;
   status_cor: StatusCor;
@@ -63,6 +65,9 @@ export interface NavioLineup {
   manobra_praticagem_id?: number | null;
   manobra_praticagem_str?: string | null;
   ajuste_praticagem_ativo?: number;
+  volume_restante_t?: number;
+  taxa_efetiva_t_hora?: number;
+  tempo_restante_horas?: number;
 }
 
 
@@ -97,7 +102,8 @@ export interface AnaliseManobraMare {
   tipoManobra: 'ATRACACAO' | 'DESATRACACAO';
   alturaMare: number;
   profundidadeTotalZh: number; // Profundidade do berço + maré
-  ukcCalculado: number; // ProfundidadeTotalZh - calado
+  caladoManobra: number; // Calado específico avaliado nesta manobra
+  ukcCalculado: number; // ProfundidadeTotalZh - caladoManobra
   ukcMinimoExigido: number; // 0.5m
   seguro: boolean;
   nivelRisco: 'SEGURO' | 'ATENCAO' | 'CRITICO';
@@ -108,9 +114,13 @@ export interface AnaliseManobraMare {
 export interface RestricaoMareNavio {
   temRestricao: boolean;
   calado: number;
+  caladoEntrada: number;
+  caladoSaida: number;
   profundidadeBercoZh: number;
   ukcMinimoExigido: number;
-  mareMinimaRequerida: number; // Calado + UKC - ProfundidadeBerco
+  mareMinimaRequerida: number; // Maior maré requerida
+  mareMinimaRequeridaEntrada: number;
+  mareMinimaRequeridaSaida: number;
   atracacao?: AnaliseManobraMare;
   desatracacao?: AnaliseManobraMare;
   resumoAlerta?: string;

@@ -190,7 +190,28 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
       });
 
     // 3. Marcador Fixo do Berço Comercial Público da CDSS (Cais Comercial)
-    const bercoCoords: [number, number] = [-23.8242, -45.3931];
+    // Coordenada exata da plataforma do cais (Anexo IX - Portaria 501/2019): [-23.81095, -45.39735]
+    // Face de acostagem estende-se por 210m entre [-23.81165, -45.39767] e [-23.81071, -45.39661]
+    const bercoCoords: [number, number] = [-23.81095, -45.39735];
+
+    // Traçado vetorial em destaque da face do Cais Comercial (210m)
+    const caisLineCoords: [number, number][] = [
+      [-23.81165, -45.39767],
+      [-23.81071, -45.39661]
+    ];
+
+    const caisLine = L.polyline(caisLineCoords, {
+      color: '#10b981',
+      weight: 4,
+      opacity: 0.95
+    }).addTo(map);
+
+    caisLine.bindTooltip(
+      `<div style="font-size: 11px; font-weight: bold; color: #10b981;">
+        Face de Acostagem &bull; Cais Comercial CDSS (210m)
+      </div>`,
+      { sticky: true, className: 'custom-map-tooltip' }
+    );
 
     const bercoIcon = L.divIcon({
       className: 'custom-berco-marker',
@@ -208,7 +229,8 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
           font-weight: 800;
           font-size: 16px;
           box-shadow: 0 0 15px rgba(16, 185, 129, 0.6);
-        ">
+          cursor: pointer;
+        " title="Berço Comercial Público (CDSS)">
           ⚓
         </div>
       `,
@@ -217,13 +239,32 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
     });
 
     const bercoMarker = L.marker(bercoCoords, { icon: bercoIcon }).addTo(map);
+
+    bercoMarker.bindTooltip(
+      `<div style="font-size: 11px; font-weight: bold; color: #34d399;">
+        ⚓ Berço Comercial Público (CDSS) &bull; 210m
+      </div>`,
+      { sticky: true, className: 'custom-map-tooltip' }
+    );
+
     bercoMarker.bindPopup(`
-      <div style="font-family: sans-serif; font-size: 12px; color: #f1f5f9; padding: 4px;">
-        <h4 style="font-weight: bold; color: #34d399; margin: 0 0 4px 0; font-size: 13px;">
-          Berço Comercial Público (CDSS)
-        </h4>
-        <p style="margin: 0; color: #94a3b8;">Berço Único de Operação Comercial</p>
-        <p style="margin: 2px 0 0 0; color: #cbd5e1; font-family: monospace;">Calado Homologado: 8,5m &bull; Extensão: 210m</p>
+      <div style="font-family: sans-serif; font-size: 12px; color: #f1f5f9; padding: 4px; min-width: 250px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 6px;">
+          <h4 style="font-weight: bold; color: #34d399; margin: 0; font-size: 13px;">
+            Berço Comercial Público (CDSS)
+          </h4>
+          <span style="font-size: 10px; background: #064e3b; color: #34d399; padding: 2px 6px; border-radius: 4px; font-weight: 600;">
+            Cais Único
+          </span>
+        </div>
+        <p style="margin: 0; color: #94a3b8; font-size: 11.5px;">Porto de São Sebastião &bull; Cais Comercial</p>
+        <div style="display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #94a3b8; background: #0b1120; padding: 6px; border-radius: 6px; border: 1px solid #1e293b; margin-top: 6px;">
+          <div><span style="color: #64748b;">Extensão Homologada:</span> <strong style="color: #cbd5e1;">210 m</strong></div>
+          <div><span style="color: #64748b;">Calado Homologado:</span> <strong style="color: #38bdf8;">8,50 m (ZH)</strong></div>
+          <div><span style="color: #64748b;">Profundidade de Projeto:</span> <strong style="color: #cbd5e1;">10,00 m (ZH)</strong></div>
+          <div><span style="color: #64748b;">Bordo de Atracação:</span> <strong style="color: #cbd5e1;">Bombordo / Boreste</strong></div>
+          <div><span style="color: #64748b;">Jurisdição:</span> <strong style="color: #10b981;">Poligonal Área 1 (Anexo IX)</strong></div>
+        </div>
       </div>
     `);
 
