@@ -342,48 +342,6 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
-        {/* Badge de Sincronização Automática SISPORT em Segundo Plano */}
-        {sisportConfig && (
-          <button
-            type="button"
-            onClick={() => setIsSyncMenuOpen((prev) => !prev)}
-            title={`Sincronização em segundo plano: ${
-              sisportConfig.ativo
-                ? `Ativa a cada ${sisportConfig.intervaloMinutos} min. Clique para configurar.`
-                : 'Pausada. Clique para ativar.'
-            }`}
-            className={`hidden md:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
-              sisportConfig.emExecucao
-                ? 'bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-cyan-300 animate-pulse'
-                : sisportConfig.ativo
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20'
-                : 'bg-slate-200/60 dark:bg-slate-800/60 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-            }`}
-          >
-            <span
-              className={`w-2 h-2 rounded-full ${
-                sisportConfig.emExecucao
-                  ? 'bg-blue-500 animate-spin'
-                  : sisportConfig.ativo
-                  ? 'bg-emerald-500 animate-pulse'
-                  : 'bg-slate-400'
-              }`}
-            />
-            <span className="font-semibold">
-              {sisportConfig.emExecucao
-                ? 'SISPORT...'
-                : sisportConfig.ativo
-                ? `Auto: ${sisportConfig.intervaloMinutos}m`
-                : 'Auto: Pausado'}
-            </span>
-            {sisportConfig.ativo && !sisportConfig.emExecucao && sisportConfig.tempoRestanteSegundos > 0 && (
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                ({Math.ceil(sisportConfig.tempoRestanteSegundos / 60)}m)
-              </span>
-            )}
-          </button>
-        )}
-
         {/* Menu Dropdown de Sincronismo CDSS */}
         <div className="relative" ref={syncMenuRef}>
           <button

@@ -360,13 +360,28 @@ export async function sincronizarComSisportOficial(): Promise<{
         statusCor = 'VERDE';
         livrePratica = 1;
         jaExisteVerde = true;
+      } else if (existing?.status_cor === 'CINZA') {
+        statusCor = 'CINZA';
       } else {
         statusCor = 'VERMELHO';
       }
     } else if (item.situacao === 'PROGRAMADO') {
-      statusCor = (existing?.status_cor === 'VERDE') ? 'VERDE' : (ordemFila <= 3 ? 'LARANJA' : 'AZUL');
+      if (existing?.status_cor === 'VERDE') {
+        statusCor = 'VERDE';
+      } else if (existing?.status_cor === 'VERMELHO' || existing?.status_cor === 'CINZA') {
+        // Se a escala já está confirmada na barra (VERMELHO) ou com livre prática (CINZA), preserva o estado real!
+        statusCor = existing.status_cor;
+      } else {
+        statusCor = (ordemFila <= 3 ? 'LARANJA' : 'AZUL');
+      }
     } else {
-      statusCor = (existing?.status_cor === 'VERDE') ? 'VERDE' : 'AZUL';
+      if (existing?.status_cor === 'VERDE') {
+        statusCor = 'VERDE';
+      } else if (existing?.status_cor === 'VERMELHO' || existing?.status_cor === 'CINZA') {
+        statusCor = existing.status_cor;
+      } else {
+        statusCor = 'AZUL';
+      }
     }
 
     // REGRA DE OURO DE POSICIONAMENTO AIS:
@@ -411,9 +426,13 @@ export async function sincronizarComSisportOficial(): Promise<{
       progressoOperacao = existing?.progresso_operacao ?? null;
     }
 
-    const chegadaFundeio = statusCor === 'VERMELHO' || statusCor === 'VERDE'
-      ? (existing?.chegada_fundeio || etaFormatado)
-      : null;
+    // PRESERVAÇÃO RIGOROSA DA CHEGADA AO FUNDEIO:
+    // Se o navio já possui chegada_fundeio salva no banco (informada manualmente ou calculada), NUNCA apaga!
+    const chegadaFundeio = existing?.chegada_fundeio
+      ? existing.chegada_fundeio
+      : (statusCor === 'VERMELHO' || statusCor === 'VERDE' || statusCor === 'CINZA'
+          ? (etaFormatado || null)
+          : null);
 
     const inicioAtracacao = statusCor === 'VERDE'
       ? (existing?.inicio_atracacao || etaFormatado)

@@ -574,7 +574,15 @@ export async function recalcularLineupComMotor(): Promise<{
     if (estaFundeadoPraticagem && navio.status_cor !== 'VERDE') {
       navio.status_cor = 'VERMELHO';
       if (!navio.chegada_fundeio) {
-        navio.chegada_fundeio = toIsoUtc(new Date(nowMs - 6 * 3600000));
+        const parsedEtaPrevisto = parseDateIso(navio.eta_previsto);
+        const parsedEtaAis = parseDateIso(navio.eta_ais);
+        if (parsedEtaPrevisto && parsedEtaPrevisto.getTime() <= nowMs) {
+          navio.chegada_fundeio = toIsoUtc(parsedEtaPrevisto);
+        } else if (parsedEtaAis && parsedEtaAis.getTime() <= nowMs) {
+          navio.chegada_fundeio = toIsoUtc(parsedEtaAis);
+        } else {
+          navio.chegada_fundeio = toIsoUtc(new Date(nowMs - 6 * 3600000));
+        }
       }
     }
 
