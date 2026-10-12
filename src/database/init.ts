@@ -151,6 +151,29 @@ export async function initializeDatabase(): Promise<void> {
     );
   `;
 
+  // Tabela de Configuração e Telemetria do Worker Periódico do SISPORT (Melhoria 8)
+  await sql`
+    CREATE TABLE IF NOT EXISTS sisport_sync_config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        ativo BOOLEAN NOT NULL DEFAULT TRUE,
+        intervalo_minutos INTEGER NOT NULL DEFAULT 15,
+        modo_sync TEXT NOT NULL DEFAULT 'SISPORT_ONLY',   -- 'SISPORT_ONLY' ou 'FULL_SYNC'
+        ultima_execucao TIMESTAMP WITH TIME ZONE,
+        proxima_execucao TIMESTAMP WITH TIME ZONE,
+        em_execucao BOOLEAN NOT NULL DEFAULT FALSE,
+        ultimo_status TEXT DEFAULT 'PENDENTE',            -- 'SUCESSO', 'ERRO', 'EM_ANDAMENTO', 'PAUSADO', 'PENDENTE'
+        ultimo_erro TEXT,
+        total_escalas_ultimo_sync INTEGER DEFAULT 0,
+        atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  await sql`
+    INSERT INTO sisport_sync_config (id, ativo, intervalo_minutos, modo_sync)
+    VALUES (1, TRUE, 15, 'SISPORT_ONLY')
+    ON CONFLICT (id) DO NOTHING;
+  `;
+
   // Popula catálogo de navios caso a tabela esteja vazia
   const [{ count: countCatalogoNavios }] = await sql`SELECT COUNT(*)::int as count FROM navios`;
   if (countCatalogoNavios === 0) {

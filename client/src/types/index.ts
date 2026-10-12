@@ -283,3 +283,17 @@ export interface PraticagemPautaResponse {
   syncStatus: PraticagemSyncStatus;
 }
 
+export interface SisportSyncConfig {
+  ativo: boolean;
+  intervaloMinutos: number;
+  modoSync: 'SISPORT_ONLY' | 'FULL_SYNC';
+  emExecucao: boolean;
+  ultimaExecucao: string | null;
+  proximaExecucao: string | null;
+  tempoRestanteSegundos: number;
+  ultimoStatus: 'SUCESSO' | 'ERRO' | 'EM_ANDAMENTO' | 'PAUSADO' | 'PENDENTE';
+  ultimoErro: string | null;
+  totalEscalasUltimoSync: number;
+}
+
+

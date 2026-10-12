@@ -6,11 +6,37 @@ import type {
   MaresResponse,
   TelemetriaMareCurrent,
   RainForecastResponse,
-  PraticagemPautaResponse
+  PraticagemPautaResponse,
+  SisportSyncConfig
 } from '../types';
 
 
 const API_BASE = '/api';
+
+export async function fetchSisportConfig(): Promise<SisportSyncConfig> {
+  const res = await fetch(`${API_BASE}/sisport/config`);
+  if (!res.ok) throw new Error(`Falha ao obter configurações do SISPORT: ${res.statusText}`);
+  const json = await res.json();
+  return json.config;
+}
+
+export async function updateSisportConfig(params: {
+  ativo?: boolean;
+  intervaloMinutos?: number;
+  modoSync?: 'SISPORT_ONLY' | 'FULL_SYNC';
+}): Promise<SisportSyncConfig> {
+  const res = await fetch(`${API_BASE}/sisport/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Erro ao atualizar configurações do SISPORT');
+  }
+  const json = await res.json();
+  return json.config;
+}
 
 export async function fetchLineup(): Promise<{ navios: NavioLineup[]; operacional: ResumoOperacional }> {
   const res = await fetch(`${API_BASE}/lineup`);

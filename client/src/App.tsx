@@ -18,9 +18,11 @@ import {
   syncSisport,
   syncAllCdss,
   fetchMares,
-  fetchCurrentTide
+  fetchCurrentTide,
+  fetchSisportConfig,
+  updateSisportConfig
 } from './services/api';
-import type { NavioLineup, ResumoOperacional, ClimaResumo, StatusCor, MaresResponse, TelemetriaMareCurrent } from './types';
+import type { NavioLineup, ResumoOperacional, ClimaResumo, StatusCor, MaresResponse, TelemetriaMareCurrent, SisportSyncConfig } from './types';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'gantt' | 'map' | 'admin' | 'praticagem'>('gantt');
@@ -45,6 +47,8 @@ export const App: React.FC = () => {
   const [navioParaExcluir, setNavioParaExcluir] = useState<NavioLineup | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
+  const [sisportConfig, setSisportConfig] = useState<SisportSyncConfig | null>(null);
+  const lastSyncRef = React.useRef<string | null>(null);
 
   // Carrega dados iniciais do backend (Lineup, Clima, Marés DHN e Telemetria SP Pilots)
   const loadData = useCallback(async () => {
@@ -72,14 +76,57 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    // Polling contínuo de status e telemetria do agendador automático SISPORT (Melhoria 8)
+    fetchSisportConfig()
+      .then(cfg => {
+        setSisportConfig(cfg);
+        lastSyncRef.current = cfg.ultimaExecucao;
+      })
+      .catch(() => {});
+
+    const sisportInterval = setInterval(() => {
+      fetchSisportConfig()
+        .then(cfg => {
+          setSisportConfig(cfg);
+          if (cfg.ultimaExecucao && cfg.ultimaExecucao !== lastSyncRef.current) {
+            lastSyncRef.current = cfg.ultimaExecucao;
+            // Se houve nova execução concluída em segundo plano, atualiza os dados da tela
+            loadData();
+          }
+        })
+        .catch(() => {});
+    }, 10000);
+
     // Polling contínuo de maré a cada 60 segundos para manter a telemetria ao vivo
     const tideInterval = setInterval(() => {
       fetchCurrentTide()
         .then(t => { if (t) setTelemetriaMare(t); })
         .catch(() => {});
     }, 60000);
-    return () => clearInterval(tideInterval);
+
+    return () => {
+      clearInterval(tideInterval);
+      clearInterval(sisportInterval);
+    };
   }, [loadData]);
+
+  // Atualização dos parâmetros do agendador automático SISPORT
+  const handleUpdateSisportConfig = async (params: {
+    ativo?: boolean;
+    intervaloMinutos?: number;
+    modoSync?: 'SISPORT_ONLY' | 'FULL_SYNC';
+  }) => {
+    try {
+      const updated = await updateSisportConfig(params);
+      setSisportConfig(updated);
+      setSuccessBanner(
+        `Configuração do SISPORT atualizada: a cada ${updated.intervaloMinutos} minutos (${updated.ativo ? 'Ativo' : 'Pausado'}).`
+      );
+    } catch (err) {
+      setErrorBanner(`Falha ao atualizar parâmetros do SISPORT: ${(err as Error).message}`);
+    }
+  };
 
   // Reordenação de fila com botões [▲ / ▼]
   const handleReorder = async (ids: number[]) => {
@@ -244,6 +291,8 @@ export const App: React.FC = () => {
         isSyncingAll={isSyncingAll}
         scaleDays={scaleDays}
         onScaleChange={setScaleDays}
+        sisportConfig={sisportConfig}
+        onUpdateSisportConfig={handleUpdateSisportConfig}
       />
 
       {/* Banner de Progresso para Sincronização Completa */}

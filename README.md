@@ -53,6 +53,7 @@ O sistema adota uma arquitetura full-stack moderna, modular e fortemente tipada:
   * `services/engine.ts`: Motor determinístico de cálculo de fila contínua e encadeamento em cascata.
   * `services/tideService.ts`: Módulo maregráfico, cálculo dinâmico de UKC e análise independente de calado (Entrada vs. Saída).
   * `services/sisportSync.ts`: Scraper resiliente da programação oficial de navios e progresso de descarga (`portoss.sp.gov.br`).
+  * `services/sisportSchedulerService.ts`: Worker de agendamento em segundo plano com Mutex lock e intervalo parametrizável via `.env`, banco ou API.
   * `services/spPilotsService.ts`: Scraper autenticado da Pauta de Manobras e tráfego de navios da Praticagem (`ssb.sppilots.com.br`).
   * `services/weather.ts`: Telemetria de maré em tempo real e previsão horária de chuva via Open-Meteo.
   * `services/navioMatcherService.ts`: Algoritmo fonético/ortográfico de resolução de IMO em 3 níveis.
@@ -419,6 +420,8 @@ A aba **Canal & Mapa** reúne a cartografia náutica oficial:
 | `POST` | `/api/navios/sync/:imo` | Sincroniza telemetria satelital AIS (DataDocked) e atualiza `eta_ais` |
 | `POST` | `/api/sisport/sync` | Sincronização em tempo real com a programação oficial da CDSS (`portoss.sp.gov.br`) |
 | `POST` | `/api/sisport/sync-all` | **Sincronização 3 em 1:** SISPORT &rarr; Praticagem SP Pilots &rarr; DataDocked AIS |
+| `GET` | `/api/sisport/config` | Consulta parâmetros ativos, contagem regressiva, status e telemetria do agendador automático |
+| `PUT` | `/api/sisport/config` | Parametrização em tempo de execução: `{ ativo, intervaloMinutos, modoSync }` sem reiniciar o Node.js |
 | `GET` | `/api/praticagem/pauta` | Pauta completa da Praticagem (5 categorias, calados declarados, resumo do porto) |
 | `POST` | `/api/praticagem/sync` | Força a sincronização imediata com a Praticagem de São Sebastião |
 | `GET` | `/api/navios/search` | Consulta inteligente no Catálogo de 16.200+ navios por nome ou IMO |
@@ -446,6 +449,11 @@ DATABASE_URL=postgresql://usuario:senha@host:porta/banco
 SP_PILOTS_USER=docasssb
 SP_PILOTS_PASS="Docas#2019"
 SP_PILOTS_URL=https://ssb.sppilots.com.br
+
+# Sincronização Periódica e Parametrizada do SISPORT (Melhoria 8)
+SISPORT_AUTO_SYNC_ENABLED=true
+SISPORT_SYNC_INTERVAL_MINUTES=15
+SISPORT_SYNC_MODE=SISPORT_ONLY
 
 # Chave da API DataDocked para telemetria AIS satelital (opcional)
 DATADOCKED_API_KEY=sua_chave_datadocked_aqui

@@ -7,12 +7,16 @@ import { initializeDatabase } from './database/init.js';
 import apiRoutes from './routes/api.js';
 import { spPilotsService } from './services/spPilotsService.js';
 import { praticagemService } from './services/praticagemService.js';
+import { sisportSchedulerService } from './services/sisportSchedulerService.js';
 import { APP_VERSION } from './version.js';
 
 dotenv.config();
 
 // Inicializa banco de dados PostgreSQL com DDL e SEED caso não existam
 await initializeDatabase();
+
+// Inicializa o agendador de sincronização periódica do SISPORT (Melhoria 8)
+await sisportSchedulerService.iniciar();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -93,6 +97,7 @@ const server = app.listen(PORT, HOST, () => {
   const shutdown = (signal: string) => {
     console.log(`\n[Server] Recebido sinal ${signal}. Encerrando graciosamente...`);
     clearInterval(intervalId);
+    sisportSchedulerService.parar();
     server.close(async () => {
       console.log('[Server] Servidor HTTP fechado.');
       try {

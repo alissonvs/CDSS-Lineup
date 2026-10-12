@@ -17,6 +17,11 @@ import {
   getRainForecastHandler
 } from '../controllers/lineupController.js';
 import {
+  getSisportConfigHandler,
+  updateSisportConfigHandler,
+  triggerSisportSyncHandler
+} from '../controllers/sisportConfigController.js';
+import {
   getPautaPraticagemHandler,
   syncPraticagemHandler
 } from '../controllers/praticagemController.js';
@@ -36,9 +41,13 @@ router.put('/navios/:id', updateNavioHandler);
 router.delete('/navios/:id', deleteNavioHandler);
 router.post('/navios/reordenar', reordenarFilaHandler);
 router.post('/navios/sync/:imo', syncDataDockedHandler);
-router.post('/sisport/sync', syncSisportHandler);
-router.post('/sisport/sync-all', syncAllHandler);
 router.get('/navios/search', searchNavioCatalogoHandler);
+
+// SISPORT: Sincronização Periódica e Parametrizada (Melhoria 8)
+router.get('/sisport/config', getSisportConfigHandler);
+router.put('/sisport/config', updateSisportConfigHandler);
+router.post('/sisport/sync', triggerSisportSyncHandler);
+router.post('/sisport/sync-all', syncAllHandler);
 
 // Praticagem de São Sebastião (SP Pilots)
 router.get('/praticagem/pauta', getPautaPraticagemHandler);

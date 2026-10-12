@@ -18,7 +18,7 @@ import {
   Ship
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import type { ClimaResumo, MaresResponse, TelemetriaMareCurrent } from '../types';
+import type { ClimaResumo, MaresResponse, TelemetriaMareCurrent, SisportSyncConfig } from '../types';
 
 interface HeaderProps {
   activeTab: 'gantt' | 'map' | 'admin' | 'praticagem';
@@ -35,6 +35,8 @@ interface HeaderProps {
   isSyncingAll?: boolean;
   scaleDays?: 7 | 14 | 28;
   onScaleChange?: (scale: 7 | 14 | 28) => void;
+  sisportConfig?: SisportSyncConfig | null;
+  onUpdateSisportConfig?: (params: { ativo?: boolean; intervaloMinutos?: number; modoSync?: 'SISPORT_ONLY' | 'FULL_SYNC' }) => Promise<void>;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -51,7 +53,9 @@ export const Header: React.FC<HeaderProps> = ({
   isSyncingSisport = false,
   isSyncingAll = false,
   scaleDays = 7,
-  onScaleChange
+  onScaleChange,
+  sisportConfig,
+  onUpdateSisportConfig
 }) => {
   const { theme, setTheme } = useTheme();
   const [timeBRT, setTimeBRT] = useState('');
@@ -338,6 +342,48 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
+        {/* Badge de Sincronização Automática SISPORT em Segundo Plano */}
+        {sisportConfig && (
+          <button
+            type="button"
+            onClick={() => setIsSyncMenuOpen((prev) => !prev)}
+            title={`Sincronização em segundo plano: ${
+              sisportConfig.ativo
+                ? `Ativa a cada ${sisportConfig.intervaloMinutos} min. Clique para configurar.`
+                : 'Pausada. Clique para ativar.'
+            }`}
+            className={`hidden md:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+              sisportConfig.emExecucao
+                ? 'bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-cyan-300 animate-pulse'
+                : sisportConfig.ativo
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20'
+                : 'bg-slate-200/60 dark:bg-slate-800/60 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+            }`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                sisportConfig.emExecucao
+                  ? 'bg-blue-500 animate-spin'
+                  : sisportConfig.ativo
+                  ? 'bg-emerald-500 animate-pulse'
+                  : 'bg-slate-400'
+              }`}
+            />
+            <span className="font-semibold">
+              {sisportConfig.emExecucao
+                ? 'SISPORT...'
+                : sisportConfig.ativo
+                ? `Auto: ${sisportConfig.intervaloMinutos}m`
+                : 'Auto: Pausado'}
+            </span>
+            {sisportConfig.ativo && !sisportConfig.emExecucao && sisportConfig.tempoRestanteSegundos > 0 && (
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                ({Math.ceil(sisportConfig.tempoRestanteSegundos / 60)}m)
+              </span>
+            )}
+          </button>
+        )}
+
         {/* Menu Dropdown de Sincronismo CDSS */}
         <div className="relative" ref={syncMenuRef}>
           <button
@@ -405,7 +451,7 @@ export const Header: React.FC<HeaderProps> = ({
                       Sincronizar SISPORT
                     </span>
                     <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                      Rápido
+                      Manual
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-1">
@@ -444,6 +490,84 @@ export const Header: React.FC<HeaderProps> = ({
                   </p>
                 </div>
               </button>
+
+              {/* Seção: Automação Periódica do SISPORT (Melhoria 8) */}
+              <div className="mt-1 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex flex-col gap-1.5">
+                <div className="px-3 py-1 flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
+                    Auto-Sync SISPORT
+                  </span>
+                  {sisportConfig && onUpdateSisportConfig && (
+                    <button
+                      type="button"
+                      onClick={() => onUpdateSisportConfig({ ativo: !sisportConfig.ativo })}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer transition-all border ${
+                        sisportConfig.ativo
+                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
+                          : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:bg-slate-300'
+                      }`}
+                    >
+                      {sisportConfig.ativo ? 'Ligado' : 'Pausado'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Seletor Rápido de Intervalos Parametrizados */}
+                <div className="px-3 py-0.5">
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mb-1">
+                    <span>Intervalo de Coleta:</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-200">
+                      {sisportConfig ? `${sisportConfig.intervaloMinutos} minutos` : '15 min'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1">
+                    {[5, 10, 15, 30, 60].map((min) => {
+                      const isSelected = sisportConfig?.ativo && sisportConfig?.intervaloMinutos === min;
+                      return (
+                        <button
+                          key={min}
+                          type="button"
+                          onClick={() => onUpdateSisportConfig?.({ intervaloMinutos: min, ativo: true })}
+                          title={`Agendar sincronização do SISPORT a cada ${min} minutos`}
+                          className={`py-1 text-[10px] font-bold rounded border transition-all text-center cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-600 dark:bg-cyan-600 text-white border-blue-500 dark:border-cyan-400 shadow-sm ring-1 ring-blue-400/30'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {min}m
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Telemetria de Próxima e Última Execução */}
+                {sisportConfig && (
+                  <div className="mx-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50 text-[10px] flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Próxima sincronização:</span>
+                      <span className="font-mono font-semibold text-slate-800 dark:text-cyan-300">
+                        {sisportConfig.ativo
+                          ? sisportConfig.tempoRestanteSegundos > 0
+                            ? `em ~${Math.ceil(sisportConfig.tempoRestanteSegundos / 60)} min`
+                            : 'em instantes...'
+                          : 'Pausado'}
+                      </span>
+                    </div>
+                    {sisportConfig.ultimaExecucao && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 dark:text-slate-400">Última execução:</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-300">
+                          {new Date(sisportConfig.ultimaExecucao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          {sisportConfig.totalEscalasUltimoSync > 0 ? ` (${sisportConfig.totalEscalasUltimoSync} escalas)` : ''}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
