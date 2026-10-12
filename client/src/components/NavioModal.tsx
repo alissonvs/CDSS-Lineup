@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { NavioLineup } from '../types';
 import { syncDataDocked, searchNavioCatalogo } from '../services/api';
-import { verificarDivergenciaEta, formatarDataBr } from '../utils/etaValidation';
+import { verificarDivergenciaEta, formatarDataBr, toLocalDateTimeInput } from '../utils/etaValidation';
 import {
   X,
   Sparkles,
@@ -59,8 +59,8 @@ export const NavioModal: React.FC<NavioModalProps> = ({
     if (navioParaEditar) {
       // Regra: se o campo inicio_operacao estiver vazio, preenche com as informações de data e hora do AIS (eta_ais)
       const inicioOp = navioParaEditar.inicio_operacao
-        ? navioParaEditar.inicio_operacao.slice(0, 16)
-        : (navioParaEditar.eta_ais ? navioParaEditar.eta_ais.slice(0, 16) : '');
+        ? toLocalDateTimeInput(navioParaEditar.inicio_operacao)
+        : (navioParaEditar.eta_ais ? toLocalDateTimeInput(navioParaEditar.eta_ais) : '');
 
       const isGado = (navioParaEditar.mercadoria?.toLowerCase().includes('boi') ||
         navioParaEditar.tipo_navio?.toLowerCase().includes('boi') ||
@@ -76,9 +76,9 @@ export const NavioModal: React.FC<NavioModalProps> = ({
       setFormData({
         ...navioParaEditar,
         inicio_operacao: inicioOp,
-        eta_previsto: navioParaEditar.eta_previsto ? navioParaEditar.eta_previsto.slice(0, 16) : '',
-        chegada_fundeio: navioParaEditar.chegada_fundeio ? navioParaEditar.chegada_fundeio.slice(0, 16) : '',
-        eta_ais: navioParaEditar.eta_ais ? navioParaEditar.eta_ais.slice(0, 16) : '',
+        eta_previsto: navioParaEditar.eta_previsto ? toLocalDateTimeInput(navioParaEditar.eta_previsto) : '',
+        chegada_fundeio: navioParaEditar.chegada_fundeio ? toLocalDateTimeInput(navioParaEditar.chegada_fundeio) : '',
+        eta_ais: navioParaEditar.eta_ais ? toLocalDateTimeInput(navioParaEditar.eta_ais) : '',
         calado: navioParaEditar.calado,
         calado_entrada: defaultEntrada,
         calado_saida: defaultSaida
@@ -161,7 +161,7 @@ export const NavioModal: React.FC<NavioModalProps> = ({
     try {
       const { vessel } = await syncDataDocked(formData.imo.trim(), navioParaEditar?.id);
       setFormData((prev) => {
-        const novoEtaAis = vessel.eta_previsto ? vessel.eta_previsto.slice(0, 16) : prev.eta_ais;
+        const novoEtaAis = vessel.eta_previsto ? toLocalDateTimeInput(vessel.eta_previsto) : prev.eta_ais;
         // Regra: se inicio_operacao estiver vazio, preenche com informações do AIS; caso já tenha informações, preserva!
         const novoInicioOp = (prev.inicio_operacao && prev.inicio_operacao.trim())
           ? prev.inicio_operacao
@@ -555,7 +555,7 @@ export const NavioModal: React.FC<NavioModalProps> = ({
                       />
                       {formData.eta_ais && (
                         <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono flex items-center justify-between">
-                          <span>Previsão AIS (DataDocked): <strong className="text-amber-600 dark:text-amber-300">{formatarDataBr(formData.eta_ais)}</strong></span>
+                          <span>Previsão AIS (DataDocked): <strong className="text-amber-600 dark:text-amber-300">{formatarDataBr(formData.eta_ais, true)}</strong></span>
                         </div>
                       )}
                     </>

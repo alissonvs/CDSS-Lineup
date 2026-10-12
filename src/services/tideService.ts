@@ -297,14 +297,20 @@ export function analisarRestricaoMareNavio(
   let desatracacaoAnalise: AnaliseManobraMare | undefined;
 
   if (inicioIso) {
-    const dInicio = new Date(inicioIso.endsWith('Z') ? inicioIso : inicioIso + 'Z');
+    const normInicio = (inicioIso.endsWith('Z') || inicioIso.includes('+') || (inicioIso.lastIndexOf('-') > 7))
+      ? inicioIso
+      : `${inicioIso.includes('T') ? inicioIso : inicioIso.replace(' ', 'T')}-03:00`;
+    const dInicio = new Date(normInicio);
     if (!isNaN(dInicio.getTime())) {
       atracacaoAnalise = analisarManobraIndividual(caladoEntrada, dInicio, 'ATRACACAO');
     }
   }
 
   if (fimIso) {
-    const dFim = new Date(fimIso.endsWith('Z') ? fimIso : fimIso + 'Z');
+    const normFim = (fimIso.endsWith('Z') || fimIso.includes('+') || (fimIso.lastIndexOf('-') > 7))
+      ? fimIso
+      : `${fimIso.includes('T') ? fimIso : fimIso.replace(' ', 'T')}-03:00`;
+    const dFim = new Date(normFim);
     if (!isNaN(dFim.getTime())) {
       desatracacaoAnalise = analisarManobraIndividual(caladoSaida, dFim, 'DESATRACACAO');
     }

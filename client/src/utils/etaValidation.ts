@@ -17,6 +17,40 @@ export interface DivergenciaEta {
 }
 
 /**
+ * Converte qualquer string de data (ISO UTC com Z, offset +/-, ou string local)
+ * para um Date com garantia de fuso horário de Brasília (UTC-3) quando não especificado.
+ */
+export function parseDateSafe(dateStr?: string | null): Date | null {
+  if (!dateStr) return null;
+  const s = dateStr.trim();
+  if (!s) return null;
+  if (s.endsWith('Z') || s.includes('+') || (s.lastIndexOf('-') > 7)) {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const iso = s.includes('T') ? s : s.replace(' ', 'T');
+  const d = new Date(`${iso}-03:00`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Converte data ISO (mesmo em UTC Z) para o formato esperado pelo <input type="datetime-local">
+ * no fuso horário local do navegador (YYYY-MM-DDTHH:mm).
+ */
+export function toLocalDateTimeInput(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  const s = dateStr.trim();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s)) {
+    return s.slice(0, 16);
+  }
+  const d = parseDateSafe(s);
+  if (!d || isNaN(d.getTime())) return s.slice(0, 16);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
  * Compara o ETA Oficial da Autoridade Portuária (SISPORT) com o ETA reportado no AIS (DataDocked)
  * Retorna null se uma das datas não estiver disponível.
  */
@@ -26,10 +60,10 @@ export function verificarDivergenciaEta(
 ): DivergenciaEta | null {
   if (!etaSisport || !etaAis) return null;
 
-  const dSisport = new Date(etaSisport);
-  const dAis = new Date(etaAis);
+  const dSisport = parseDateSafe(etaSisport);
+  const dAis = parseDateSafe(etaAis);
 
-  if (isNaN(dSisport.getTime()) || isNaN(dAis.getTime())) return null;
+  if (!dSisport || !dAis || isNaN(dSisport.getTime()) || isNaN(dAis.getTime())) return null;
 
   const diffMs = dAis.getTime() - dSisport.getTime();
   const diffHoras = Math.round(diffMs / (1000 * 60 * 60));
@@ -112,13 +146,14 @@ export function verificarDivergenciaEta(
 
 /**
  * Formata data e hora no padrão brasileiro (DD/MM/AAAA às HH:mm)
+ * Garante que qualquer entrada (UTC Z ou local) seja convertida e expressa no Horário de Brasília (BRT).
  */
-export function formatarDataBr(dateStr?: string | null): string {
+export function formatarDataBr(dateStr?: string | null, incluirFuso = false): string {
   if (!dateStr) return 'Não informado';
   try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return (
+    const d = parseDateSafe(dateStr);
+    if (!d || isNaN(d.getTime())) return dateStr;
+    const base = (
       d.toLocaleDateString('pt-BR', {
         day: '2-digit',
         month: '2-digit',
@@ -130,6 +165,7 @@ export function formatarDataBr(dateStr?: string | null): string {
         minute: '2-digit'
       })
     );
+    return incluirFuso ? `${base} (BRT)` : base;
   } catch {
     return dateStr;
   }

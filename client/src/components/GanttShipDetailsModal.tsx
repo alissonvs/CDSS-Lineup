@@ -76,10 +76,7 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
   const formatSyncDateTime = (dateStr?: string | null) => {
     if (!dateStr) return null;
     try {
-      const normalizedStr = dateStr.includes('T')
-        ? (dateStr.endsWith('Z') ? dateStr : dateStr + 'Z')
-        : dateStr.replace(' ', 'T') + 'Z';
-      const d = new Date(normalizedStr);
+      const d = new Date(dateStr);
       if (isNaN(d.getTime())) return dateStr;
       return (
         d.toLocaleDateString('pt-BR', {
@@ -92,11 +89,36 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit'
-        })
+        }) +
+        ' (BRT)'
       );
     } catch {
       return dateStr;
     }
+  };
+
+  /**
+   * Converte a data da antena AIS (ex: "Oct 12, 2026 12:39 UTC")
+   * para o Horário de Brasília (BRT), preservando a referência UTC do satélite.
+   */
+  const formatarSinalAntena = (rawStr?: string | null) => {
+    if (!rawStr) return null;
+    try {
+      const d = new Date(rawStr);
+      if (!isNaN(d.getTime())) {
+        const localStr = d.toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit'
+        }) + ' às ' + d.toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        return `${localStr} (BRT) • Transmissão AIS Satelital (${rawStr})`;
+      }
+    } catch {
+      // fallback
+    }
+    return rawStr;
   };
 
   const handleDataDockedSync = async () => {
@@ -434,19 +456,25 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
                 {/* Confronto lado a lado */}
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                   <div className="p-2.5 rounded-lg bg-white dark:bg-cco-darkest/80 border border-slate-200 dark:border-cco-border">
-                    <span className="text-[10px] text-blue-700 dark:text-cyan-400 block font-sans font-bold uppercase tracking-wider mb-0.5">
-                      🏛️ SISPORT (Porto Oficial)
-                    </span>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] text-blue-700 dark:text-cyan-400 font-sans font-bold uppercase tracking-wider">
+                        🏛️ SISPORT (Porto Oficial)
+                      </span>
+                      <span className="text-[9px] text-blue-600/70 dark:text-cyan-300/70 font-sans font-semibold">BRT (UTC-3)</span>
+                    </div>
                     <span className="font-bold text-slate-900 dark:text-slate-100">
-                      {formatarDataBr(navio.eta_previsto)}
+                      {formatarDataBr(navio.eta_previsto, true)}
                     </span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-white dark:bg-cco-darkest/80 border border-slate-200 dark:border-cco-border">
-                    <span className="text-[10px] text-amber-700 dark:text-amber-400 block font-sans font-bold uppercase tracking-wider mb-0.5">
-                      📡 Transponder AIS (DataDocked)
-                    </span>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] text-amber-700 dark:text-amber-400 font-sans font-bold uppercase tracking-wider">
+                        📡 Transponder AIS (DataDocked)
+                      </span>
+                      <span className="text-[9px] text-amber-600/70 dark:text-amber-300/70 font-sans font-semibold">BRT (UTC-3)</span>
+                    </div>
                     <span className="font-bold text-slate-900 dark:text-slate-100">
-                      {formatarDataBr(navio.eta_ais)}
+                      {formatarDataBr(navio.eta_ais, true)}
                     </span>
                   </div>
                 </div>
@@ -628,7 +656,7 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
                       Sincronizado em: <strong className="text-emerald-800 dark:text-emerald-300">{lastSyncInfo?.timeStr}</strong> (BRT)
                     </span>
                     {(lastSyncInfo?.positionReceived || navio.sinal_antena) && (
-                      <span className="opacity-80">&bull; Sinal da antena: {lastSyncInfo?.positionReceived || navio.sinal_antena}</span>
+                      <span className="opacity-80">&bull; Sinal da antena: {formatarSinalAntena(lastSyncInfo?.positionReceived || navio.sinal_antena)}</span>
                     )}
                   </div>
                 </div>
@@ -688,7 +716,7 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
               <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono pt-1.5 border-t border-blue-200 dark:border-cyan-500/10 flex items-center space-x-1.5">
                 <Radio className="w-3 h-3 text-blue-600 dark:text-cyan-400 shrink-0" />
                 <span>Sinal da Antena AIS:</span>
-                <span className="text-blue-800 dark:text-cyan-200">{lastSyncInfo?.positionReceived || navio.sinal_antena}</span>
+                <span className="text-blue-800 dark:text-cyan-200">{formatarSinalAntena(lastSyncInfo?.positionReceived || navio.sinal_antena)}</span>
               </div>
             )}
           </div>

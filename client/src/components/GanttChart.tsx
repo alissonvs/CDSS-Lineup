@@ -184,13 +184,16 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     return days;
   }, [timelineStart, timelineEnd, agoraDate.toDateString()]);
 
-  // Função auxiliar para parsing de data UTC invariante evitando desvios de fuso
+  // Função auxiliar para parsing de data UTC invariante e fuso local BRT (evitando desvios de 3h)
   const parseDateToMs = (dateStr?: string | null): number => {
     if (!dateStr) return NaN;
     const s = dateStr.trim();
     if (!s) return NaN;
-    const norm = s.endsWith('Z') || s.includes('+') || (s.lastIndexOf('-') > 7) ? s : s + 'Z';
-    return new Date(norm).getTime();
+    if (s.endsWith('Z') || s.includes('+') || (s.lastIndexOf('-') > 7)) {
+      return new Date(s).getTime();
+    }
+    const isoFormatted = s.includes('T') ? s : s.replace(' ', 'T');
+    return new Date(`${isoFormatted}-03:00`).getTime();
   };
 
   // Mapeamento contínuo dos extremos astronômicos da DHN para a Mini-Curva de Maré (SVG Sparkline)
@@ -220,11 +223,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   const formatSyncDate = (dateStr?: string | null) => {
     if (!dateStr) return '';
     try {
-      const normalizedStr = dateStr.includes('T')
-        ? (dateStr.endsWith('Z') ? dateStr : dateStr + 'Z')
-        : dateStr.replace(' ', 'T') + 'Z';
-      const d = new Date(normalizedStr);
-      if (isNaN(d.getTime())) return dateStr;
+      const ms = parseDateToMs(dateStr);
+      if (isNaN(ms)) return dateStr;
+      const d = new Date(ms);
       return (
         d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
         ' às ' +

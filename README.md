@@ -396,10 +396,9 @@ O módulo conecta-se ao portal oficial da Praticagem de São Sebastião (`ssb.sp
 
 A aba **Canal & Mapa** reúne a cartografia náutica oficial:
 
-* **Posicionamento Homologado do Berço 101:** Coordenadas oficiais de cais:
-  - **Latitude:** `-23.82390`
-  - **Longitude:** `-45.39950`
-  - Marcador de âncora posicionado com precisão submétrica no cais comercial (não no meio do canal).
+* **Face de Acostagem do Cais Comercial (Berço 101):** Extensão oficial de 210 metros representada no alinhamento exato de cais:
+  - **Extensão:** $210\,\text{m}$ (face de acostagem entre `[-23.81165, -45.39767]` e `[-23.81071, -45.39661]`).
+  - **Integração com a Poligonal:** Integrado à delimitação oficial da Área 1 (Anexo IX), com tooltip e popup interativo com especificações técnicas do cais.
 * **Poligonal do Porto Organizado:** Camada GeoJSON vetorial com os vértices oficiais definidos pela **Portaria nº 501/2019 - MINFRA/ANTAQ**.
 * **Basemaps CARTO:** Alternância entre mapas *Dark Matter*, *Positron*, *Voyager* e *Satélite*.
 

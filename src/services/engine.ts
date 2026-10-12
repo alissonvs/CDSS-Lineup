@@ -241,14 +241,21 @@ export async function calcularDesatracacaoDinamicaNavioVerde(
 }
 
 /**
- * Faz o parsing rigoroso de datas ISO para objetos Date no fuso UTC invariante
+ * Faz o parsing rigoroso de datas para objetos Date universais (UTC).
+ * - Se a string já tiver indicação de fuso (Z, +, ou offset -03:00), preserva o fuso.
+ * - Se for data/hora local sem fuso (ex: SISPORT ou input manual "2026-10-15T12:00:00"),
+ *   interpreta no fuso regulamentar do Porto de São Sebastião: Horário de Brasília (BRT, UTC-3).
  */
 export function parseDateIso(str?: string | null): Date | null {
   if (!str) return null;
   const s = str.trim();
   if (!s) return null;
-  const norm = s.endsWith('Z') || s.includes('+') || (s.lastIndexOf('-') > 7) ? s : s + 'Z';
-  const d = new Date(norm);
+  if (s.endsWith('Z') || s.includes('+') || (s.lastIndexOf('-') > 7)) {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const isoFormatted = s.includes('T') ? s : s.replace(' ', 'T');
+  const d = new Date(`${isoFormatted}-03:00`);
   return isNaN(d.getTime()) ? null : d;
 }
 

@@ -189,12 +189,8 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
         console.error('[CanalMap] Erro ao carregar GeoJSON da Área do Porto Organizado:', err);
       });
 
-    // 3. Marcador Fixo do Berço Comercial Público da CDSS (Cais Comercial)
-    // Coordenada exata da plataforma do cais (Anexo IX - Portaria 501/2019): [-23.81095, -45.39735]
-    // Face de acostagem estende-se por 210m entre [-23.81165, -45.39767] e [-23.81071, -45.39661]
-    const bercoCoords: [number, number] = [-23.81095, -45.39735];
-
     // Traçado vetorial em destaque da face do Cais Comercial (210m)
+    // Face de acostagem estende-se por 210m entre [-23.81165, -45.39767] e [-23.81071, -45.39661]
     const caisLineCoords: [number, number][] = [
       [-23.81165, -45.39767],
       [-23.81071, -45.39661]
@@ -213,45 +209,11 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
       { sticky: true, className: 'custom-map-tooltip' }
     );
 
-    const bercoIcon = L.divIcon({
-      className: 'custom-berco-marker',
-      html: `
-        <div style="
-          background: #0f172a;
-          border: 2px solid #10b981;
-          color: #10b981;
-          width: 32px;
-          height: 32px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 800;
-          font-size: 16px;
-          box-shadow: 0 0 15px rgba(16, 185, 129, 0.6);
-          cursor: pointer;
-        " title="Berço Comercial Público (CDSS)">
-          ⚓
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16]
-    });
-
-    const bercoMarker = L.marker(bercoCoords, { icon: bercoIcon }).addTo(map);
-
-    bercoMarker.bindTooltip(
-      `<div style="font-size: 11px; font-weight: bold; color: #34d399;">
-        ⚓ Berço Comercial Público (CDSS) &bull; 210m
-      </div>`,
-      { sticky: true, className: 'custom-map-tooltip' }
-    );
-
-    bercoMarker.bindPopup(`
+    caisLine.bindPopup(`
       <div style="font-family: sans-serif; font-size: 12px; color: #f1f5f9; padding: 4px; min-width: 250px;">
         <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 6px;">
           <h4 style="font-weight: bold; color: #34d399; margin: 0; font-size: 13px;">
-            Berço Comercial Público (CDSS)
+            Cais Comercial CDSS (Berço 101)
           </h4>
           <span style="font-size: 10px; background: #064e3b; color: #34d399; padding: 2px 6px; border-radius: 4px; font-weight: 600;">
             Cais Único

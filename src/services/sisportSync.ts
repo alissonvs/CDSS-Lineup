@@ -113,18 +113,18 @@ function parseBrNumber(valStr: string): number {
 }
 
 /**
- * Converte data DD/MM/AAAA para formato ISO (AAAA-MM-DDTHH:mm:ss)
+ * Converte data DD/MM/AAAA para formato ISO com fuso oficial de Brasília (AAAA-MM-DDTHH:mm:ss-03:00)
  */
 function parseBrDate(dateStr: string, horaPadrao = '12:00:00'): string {
   if (!dateStr || !dateStr.includes('/')) {
-    return new Date().toISOString().slice(0, 19);
+    return new Date().toISOString();
   }
   const parts = dateStr.split('/');
   if (parts.length === 3) {
     const [dia, mes, ano] = parts;
-    return `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}T${horaPadrao}`;
+    return `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}T${horaPadrao}-03:00`;
   }
-  return new Date().toISOString().slice(0, 19);
+  return new Date().toISOString();
 }
 
 /**
