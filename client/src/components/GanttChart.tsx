@@ -433,8 +433,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 
           {/* Identificação da Linha "Agora" agrupada à esquerda */}
           <div className="flex items-center space-x-1.5 pl-3 border-l border-slate-300 dark:border-slate-700">
-            <span className="w-3 h-0.5 bg-rose-500"></span>
-            <span className="text-rose-600 dark:text-rose-400 font-mono font-semibold whitespace-nowrap">
+            <span className="w-3 h-0.5 bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]"></span>
+            <span className="text-amber-500 dark:text-amber-400 font-mono font-semibold whitespace-nowrap">
               Linha "Agora" ({agoraDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}{' '}
               {agoraDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} BRT)
             </span>
@@ -452,8 +452,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
               <span>⏱️</span>
               <span>Marcador Temporal CCO</span>
             </span>
-            <span className="text-rose-600 dark:text-rose-400 font-bold flex items-center space-x-1 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-300 dark:border-rose-500/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
+            <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center space-x-1 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-500/40">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
               <span>TEMPO REAL</span>
             </span>
           </div>
@@ -478,9 +478,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 className="absolute top-0 bottom-0 pointer-events-none flex items-center -translate-x-1/2 z-30"
                 style={{ left: `${agoraPercent}%` }}
               >
-                <div className="bg-rose-600 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-lg shadow-rose-600/60 uppercase tracking-tighter whitespace-nowrap flex items-center space-x-1 border border-rose-400 animate-pulse pointer-events-none">
+                <div className="bg-amber-400 text-slate-950 text-[9px] font-black px-2 py-0.5 rounded shadow-lg shadow-amber-400/60 uppercase tracking-tighter whitespace-nowrap flex items-center space-x-1 border border-amber-300 animate-pulse pointer-events-none">
                   <span>AGORA</span>
-                  <span className="text-[8px] leading-none text-rose-200">▼</span>
+                  <span className="text-[8px] leading-none text-slate-900">▼</span>
                 </div>
               </div>
             )}
@@ -502,7 +502,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 key={idx}
                 className={`flex-1 flex flex-col items-center justify-center border-r text-[10px] font-mono leading-tight transition-colors ${
                   day.isToday
-                    ? 'bg-rose-100/70 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold border-rose-300 dark:border-rose-500/60'
+                    ? 'bg-amber-100/70 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold border-amber-300 dark:border-amber-500/60'
                     : day.isWeekend
                     ? 'bg-slate-200/60 dark:bg-slate-900/90 text-blue-900 dark:text-cyan-200 border-slate-300 dark:border-cco-border/50 ring-1 ring-inset ring-blue-500/10 dark:ring-cyan-500/15'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-cco-hover/40 border-slate-200 dark:border-cco-border/30'
@@ -511,16 +511,16 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 <span className={`uppercase text-[9px] font-bold ${day.isWeekend ? 'text-blue-700 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400'}`}>
                   {day.weekday}
                 </span>
-                <span className={`text-xs ${day.isToday ? 'text-rose-600 dark:text-rose-400 font-extrabold' : day.isWeekend ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-800 dark:text-slate-200 font-semibold'}`}>
+                <span className={`text-xs ${day.isToday ? 'text-amber-600 dark:text-amber-400 font-extrabold' : day.isWeekend ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-800 dark:text-slate-200 font-semibold'}`}>
                   {day.dayNum}
                 </span>
               </div>
             ))}
 
-            {/* Linha vertical vermelha guia no cabeçalho dos dias */}
+            {/* Linha vertical dourada guia no cabeçalho dos dias */}
             {isAgoraVisible && (
               <div
-                className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-rose-500/80 -translate-x-1/2"
+                className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-amber-400/90 shadow-[0_0_8px_rgba(251,191,36,0.8)] -translate-x-1/2"
                 style={{ left: `${agoraPercent}%` }}
               ></div>
             )}
@@ -570,10 +570,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
               ))}
             </div>
 
-            {/* Linha vertical guia vermelha do AGORA na fita de marés */}
+            {/* Linha vertical guia dourada do AGORA na fita de marés */}
             {isAgoraVisible && (
               <div
-                className="absolute top-0 bottom-0 z-[5] pointer-events-none w-0.5 bg-rose-500/80 -translate-x-1/2"
+                className="absolute top-0 bottom-0 z-[5] pointer-events-none w-0.5 bg-amber-400/90 shadow-[0_0_8px_rgba(251,191,36,0.8)] -translate-x-1/2"
                 style={{ left: `${agoraPercent}%` }}
               ></div>
             )}
@@ -626,10 +626,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
               ))}
             </div>
 
-            {/* Linha vertical vermelha guia em Linha 0 */}
+            {/* Linha vertical dourada guia em Linha 0 */}
             {isAgoraVisible && (
               <div
-                className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.9)] -translate-x-1/2"
+                className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] -translate-x-1/2"
                 style={{ left: `${agoraPercent}%` }}
               ></div>
             )}
@@ -725,10 +725,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             />
           )}
 
-          {/* Linha vertical vermelha que desce por todo o corpo da grade */}
+          {/* Linha vertical dourada que desce por todo o corpo da grade */}
           {isAgoraVisible && (
             <div
-              className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.9)] -translate-x-1/2"
+              className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] -translate-x-1/2"
               style={{ left: `calc(26.5rem + (100% - 26.5rem) * ${agoraPercent / 100})` }}
             />
           )}
@@ -740,7 +740,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 key={idx}
                 className={`flex-1 border-r transition-colors ${
                   day.isToday
-                    ? 'border-rose-300/40 bg-rose-50/20 dark:border-rose-500/25 dark:bg-rose-950/15'
+                    ? 'border-amber-300/40 bg-amber-50/20 dark:border-amber-500/25 dark:bg-amber-950/15'
                     : day.isWeekend
                     ? 'border-slate-200 dark:border-cco-border/40 bg-slate-100/60 dark:bg-[#0c1527]/75 shadow-[inset_0_0_12px_rgba(15,23,42,0.03)] dark:shadow-[inset_0_0_12px_rgba(15,23,42,0.6)]'
                     : 'border-slate-100 dark:border-cco-border/20'

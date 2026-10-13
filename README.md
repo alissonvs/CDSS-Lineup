@@ -30,8 +30,9 @@
    - 3.7. [Interpolação Harmônica Sinusoidal de Maré (Curva Contínua)](#37-interpolação-harmônica-sinusoidal-de-maré-curva-contínua)
    - 3.8. [Auditoria de Divergência Temporal de ETA (SISPORT vs. AIS)](#38-auditoria-de-divergência-temporal-de-eta-sisport-vs-ais)
    - 3.9. [Algoritmo de Encadeamento em Cascata (Waterfall Scheduling)](#39-algoritmo-de-encadeamento-em-cascata-waterfall-scheduling)
-   - 3.10. [Taxa de Ocupação do Berço e Backlog de Carteira](#310-taxa-de-ocupação-do-berço-e-backlog-de-carteira)
+   - 3.10. [Taxa de Ocupação do Berço, Carga Total e Backlog de Carteira](#310-taxa-de-ocupação-do-berço-carga-total-e-backlog-de-carteira)
    - 3.11. [Algoritmo de Resolução de IMO (Jaro-Winkler)](#311-algoritmo-de-resolução-de-imo-jaro-winkler)
+   - 3.12. [Preservação de Estados Operacionais e Fundeio Real](#312-preservação-de-estados-operacionais-e-fundeio-real)
 4. [Inovações e Ergonomia Visual do Gantt CCO (v2.0)](#4-inovações-e-ergonomia-visual-do-gantt-cco-v20)
 5. [Integração com a Praticagem (SP Pilots) & Projeção Real](#5-integração-com-a-praticagem-sp-pilots--projeção-real)
 6. [Canal de São Sebastião & Cartografia ANTAQ](#6-canal-de-são-sebastião--cartografia-antaq)
@@ -321,18 +322,22 @@ flowchart TD
 
 ---
 
-### 3.10. Taxa de Ocupação do Berço e Backlog de Carteira
+### 3.10. Taxa de Ocupação do Berço, Carga Total e Backlog de Carteira
 
-O cálculo de ocupação do berço é dissociado em dois indicadores para evitar distorções estatísticas:
+O cálculo de capacidade e ocupação do berço é dissociado em indicadores complementares para refletir a realidade operacional da infraestrutura portuária:
 
-1. **Taxa de Ocupação Nominal (Janela Mensal de 30 Dias = 720 Horas):**
+1. **Carga Total Programada ($V_{\text{carteira}}$):**
+   $$V_{\text{carteira}} = \sum_{i=1}^{N} V_{\text{total}}(i) \quad [\text{t}]$$
+   Somatório aritmético contínuo do volume manifestado de todas as $N$ embarcações ativas na fila oficial (ex: $252.050\,\text{t}$ distribuídas entre alumina, barrilha, malte, trigo e carga viva).
+
+2. **Taxa de Ocupação Nominal (Janela Mensal de 30 Dias = 720 Horas):**
    $$\text{Taxa Ocupação (30D)} = \min\left(100\%,\, \frac{\min(H_{\text{janela}}, 720)}{720} \times 100\%\right)$$
-   Onde $H_{\text{janela}}$ é a soma das horas de ocupação de cais que recaem estritamente dentro dos próximos 30 dias a partir do `AGORA`.
+   Onde $H_{\text{janela}}$ é a soma das horas de ocupação de cais que recaem estritamente dentro dos próximos 30 dias nominais ($30 \times 24 = 720\,\text{h}$) a partir do `AGORA`. Quando a carteira de navios ultrapassa 720 horas de fila contínua, o berço atinge a saturação física máxima de **100%**.
 
-2. **Demanda Total em Carteira (Backlog Acumulado):**
+3. **Demanda Total em Carteira (Backlog Acumulado e Dias de Cais):**
    $$\text{Demanda Total (\%)} = \frac{\sum_{i=1}^{N} D_{\text{total}}(i)}{720} \times 100\%$$
-   $$\text{Dias de Cais Necessários} = \frac{\sum_{i=1}^{N} D_{\text{total}}(i)}{24} \quad [\text{dias}]$$
-   *Exemplo Real:* Ocupação da janela $100\%$ | Backlog: $2.709{,}9\,\text{h}$ ($376{,}4\%$ de demanda acumulada, correspondendo a $\approx 113$ dias de cais).
+   $$\text{Dias de Cais Estimados} = \frac{\sum_{i=1}^{N} D_{\text{total}}(i)}{24} \quad [\text{dias}]$$
+   *Exemplo Real da Central:* Ocupação da janela $100\%$ | Backlog Total da Fila: $2.280{,}5\,\text{h}$ ($317{,}0\%$ de demanda acumulada frente à capacidade mensal, correspondendo a $\approx 95$ dias contínuos de cais). O tooltip de auditoria detalha a saturação nominal e o backlog em carteira.
 
 ---
 
@@ -358,23 +363,53 @@ Para evitar dependência de APIs lentas ou indisponíveis, a associação do nom
 
 ---
 
+### 3.12. Preservação de Estados Operacionais e Fundeio Real
+
+Durante as sincronizações contínuas com a programação oficial da CDSS (`portoss.sp.gov.br`), o sistema aplica regras estritas de não-regressão de dados:
+
+1. **Preservação de Chegada ao Fundeio ($t_{\text{fundeio}}$):**  
+   Quando uma escala é catalogada como `PROGRAMADO` na planilha externa, o sincronizador verifica se a embarcação já possui carimbo de chegada ao fundeio salvo no banco de dados (inserido manualmente pelo operador ou calculado). Esse valor é mantido permanentemente e **nunca** sobrescrito com `null`.
+2. **Preservação de Status Conquistado:**  
+   Se uma embarcação já foi classificada pelo CCO como na barra (`VERMELHO`) ou com livre prática concedida (`CINZA`), atualizações externas que tragam `PROGRAMADO` preservam o status operacional real da escala.
+3. **Resolução Cronológica de Fallback no Motor:**  
+   Se um navio consta como fundeado na Praticagem mas sem horário registrado, o motor de cálculo primeiro avalia se o `eta_previsto` ou `eta_ais` já transcorreram no passado antes de recorrer a estimativas sintéticas, impedindo que navios distintos recebam carimbos temporais artificiais idênticos.
+
+---
+
 ## 4. Inovações e Ergonomia Visual do Gantt CCO (v2.0)
 
 O diagrama de Gantt foi construído para visualização ininterrupta em centros de controle operacional de videowall:
 
 1. **Cabeçalho Empilhado Fixo (*Sticky Stack*):**
-   * **Linha 1 (`top-0`, 24px):** Linha guia do momento presente (`AGORA ▼`) com agulha vertical contínua que desce por toda a grade.
-   * **Linha 2 (`top-24px`, 44px):** Régua dos dias do mês com destaque cromático nos finais de semana.
+   * **Linha 1 (`top-0`, 24px):** Linha de referência presente (**`AGORA ▼`**) com agulha vertical luminosa contínua que desce por toda a grade.
+   * **Linha 2 (`top-24px`, 44px):** Régua dos dias do mês com destaque cromático no dia de hoje e nos finais de semana.
    * **Linha 3 (`top-68px`, 50px):** Sparkline vetorial SVG da curva harmônica de maré da DHN (azul ciano preamar `▲`, âmbar baixamar `▼`).
    * **Linha 4 (`top-118px`, 48px):** Fita contínua de ocupação do Berço 101 comercial.
-2. **Barras Operacionais Limpas:** Identificação da etapa mantida no topo e nos tooltips sob demanda (*hover*), com visual limpo e sem poluição visual.
-3. **Escalas Temporais Rápidas:** Alternador no topo para janelas de **7 Dias** (visão tática), **14 Dias** (visão quinzenal) e **28 Dias** (visão mensal de planejamento).
-4. **Semântica de Cores Oficial CDSS:**
+2. **Linha Guia "AGORA" em Amarelo Dourado (*Golden Radar*):**
+   * **Destaque Cromático Semântico:** O cursor temporal, o badge `AGORA ▼` e a linha vertical utilizam tom **Amarelo Dourado** (`amber-400` / `#FBBF24`) com halo de iluminação (`shadow-[0_0_12px_rgba(251,191,36,0.9)]`).
+   * **Zero Conflito Visual:** Elimina a confusão com as barras vermelhas de navios fundeados e com alertas de emergência, proporcionando leitura imediata e alto contraste sobre qualquer bloco do gráfico.
+   * **Descritivo da Legenda:** A indicação `— Linha "Agora" (DD/MM HH:MM BRT)` exibe o horário oficial local de Brasília (BRT) sincronizado com UTC invariante.
+3. **Barra Inferior de KPIs Operacionais em Tempo Real:**
+   * **Total no Line-up:** Contagem de escalas ativas na fila (`16 navios`).
+   * **Operando no Berço:** Destaque do navio fisicamente atracado no Cais Comercial (`1 ativo`).
+   * **Fundeio / Espera:** Contagem das embarcações aguardando atendimento (`15 aguardando`).
+   * **Carga Total Programada:** Somatório de todas as cargas ativas em toneladas métricas ($252.050\,\text{t}$).
+   * **Ocupação do Berço (Janela 30D):** Barra de progresso da saturação física (100% = 720h nominais completas) com tooltip de auditoria.
+   * **Fila Total e Demanda:** Horas totais acumuladas de operação ($2.280{,}5\,\text{h}$), percentual de sobrecarga ($317{,}0\%$) e dias estimados de cais ($\approx 95$ dias).
+4. **Menu Unificado de Sincronização CDSS no Header:**
+   * Acesso simplificado pelo botão suspenso `Sincronizar CDSS ∨`:
+     * Disparo manual do SISPORT Oficial.
+     * Sincronização integrada 3 em 1 (SISPORT + Praticagem + AIS).
+     * Parametrização em tempo real da frequência do worker de segundo plano (5, 10, 15, 30 ou 60 minutos, ou pausado).
+     * Telemetria da última execução e contagem regressiva para a próxima varredura.
+5. **Semântica de Cores Oficial CDSS:**
    * 🟢 **Verde:** Operando fisicamente no berço comercial único.
    * 🔵 **Azul:** Previsão de berço futura encadeada pelo motor.
    * 🔴 **Vermelho:** Fundeado na barra em espera confirmada.
    * 🟠 **Laranja:** Espera prevista (aguardando chegada do navio).
-5. **Dark & Light Mode:** Paleta noturna profunda de alta densidade (`#070d18`) ou modo diurno de alto contraste (`#f8fafc`), com alternância instantânea.
+   * ⚪ **Cinza:** Livre prática sanitária concedida.
+   * 🟡 **Amarelo Dourado:** Cursor temporal e Linha "AGORA" em tempo real.
+6. **Dark & Light Mode:** Paleta noturna profunda de alta densidade (`#070d18`) ou modo diurno de alto contraste (`#f8fafc`), com alternância instantânea.
 
 ---
 
@@ -399,7 +434,7 @@ A aba **Canal & Mapa** reúne a cartografia náutica oficial:
 
 * **Face de Acostagem do Cais Comercial (Berço 101):** Extensão oficial de 210 metros representada no alinhamento exato de cais:
   - **Extensão:** $210\,\text{m}$ (face de acostagem entre `[-23.81165, -45.39767]` e `[-23.81071, -45.39661]`).
-  - **Integração com a Poligonal:** Integrado à delimitação oficial da Área 1 (Anexo IX), com tooltip e popup interativo com especificações técnicas do cais.
+  - **Visualização Náutica Limpa:** Alinhamento geométrico do cais sobre a Área 1 (Anexo IX), eliminando marcadores avulsos de âncora sobre o berço e mantendo popups interativos com especificações técnicas e calados operacionais.
 * **Poligonal do Porto Organizado:** Camada GeoJSON vetorial com os vértices oficiais definidos pela **Portaria nº 501/2019 - MINFRA/ANTAQ**.
 * **Basemaps CARTO:** Alternância entre mapas *Dark Matter*, *Positron*, *Voyager* e *Satélite*.
 
