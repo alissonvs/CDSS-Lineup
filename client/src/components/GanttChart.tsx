@@ -592,55 +592,33 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           </div>
         </div>
 
-        {/* 4. Trilho Consolidado de Berço Único (Cais Comercial CDSS) - Linha Mestre Fixa */}
-        <div className="sticky top-[118px] z-30 bg-white dark:bg-[#070d18] border-b border-slate-200 dark:border-cco-border flex h-12 items-center shrink-0 shadow-sm">
-          {/* Coluna Y fixa do Berço */}
-          <div className="w-[26.5rem] min-w-[26.5rem] px-4 py-2 bg-white dark:bg-[#070d18] border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-30">
-            <div className="flex items-center space-x-2">
-              <span className="text-emerald-500 dark:text-emerald-400 font-extrabold text-base">⚓</span>
-              <div>
-                <div className="font-extrabold text-xs text-slate-900 dark:text-white uppercase tracking-wider">
-                  Ocupação do Berço
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                  Cais Comercial Único • Berço 1
-                </div>
-              </div>
-            </div>
-            <span className="text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-mono font-bold px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-500/40">
-              Fila Contínua
-            </span>
-          </div>
+        {/* 4. Trilhos Consolidados de Ocupação dos Berços (Berço 101 e Berço 202) */}
+        {(() => {
+          const renderBercoTrack = (bercoId: '101' | '202') => {
+            const bercoNavios = navios.filter((n) => {
+              if (bercoId === '101') {
+                if (n.status_cor === 'VERDE') {
+                  // Berço 101: navios com berço 101 (ou default se não especificado)
+                  return n.berco === '101' || !n.berco;
+                }
+                // Toda a sequência cronológica da fila de espera comercial atracará no Cais Comercial (Berço 101)
+                return n.berco === '101' || !n.berco;
+              } else {
+                if (n.status_cor === 'VERDE') {
+                  // Berço 202 (Cais Interno): operação no cais interno / apoio
+                  return n.berco === '202';
+                }
+                return n.berco === '202';
+              }
+            });
 
-          {/* Fita contínua de ocupação no tempo (Verde + Azuis em série sem sobreposição) */}
-          <div className="flex-1 relative flex items-center h-full bg-white dark:bg-[#070d18]">
-            {/* Linhas verticais dos dias de fundo */}
-            <div className="absolute inset-0 flex pointer-events-none">
-              {daysList.map((day, idx) => (
-                <div
-                  key={idx}
-                  className={`flex-1 border-r ${
-                    day.isWeekend ? 'bg-slate-100 dark:bg-slate-900/40 border-slate-200 dark:border-cco-border/30' : 'border-slate-100 dark:border-cco-border/15'
-                  }`}
-                ></div>
-              ))}
-            </div>
-
-            {/* Linha vertical dourada guia em Linha 0 */}
-            {isAgoraVisible && (
-              <div
-                className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] -translate-x-1/2"
-                style={{ left: `${agoraPercent}%` }}
-              ></div>
-            )}
-
-            {navios.flatMap((n) => {
+            const allBlocks = bercoNavios.flatMap((n) => {
               const berthBlocks = (n.blocos || []).filter((b) => b.tipo === 'OPERACAO_DESATRACACAO' || b.tipo === 'VERDE' || b.tipo === 'AZUL');
               if (berthBlocks.length > 0) {
                 return berthBlocks.map((b, bIdx) => ({
                   navio: n,
                   bloco: b,
-                  key: `berco-track-${n.id}-${bIdx}`
+                  key: `berco-${bercoId}-track-${n.id}-${bIdx}`
                 }));
               }
               return [{
@@ -652,59 +630,191 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   fimIso: n.fim_atracacao || '',
                   duracaoHoras: n.duracao_estimada_horas || 0
                 },
-                key: `berco-track-${n.id}-0`
+                key: `berco-${bercoId}-track-${n.id}-0`
               }];
-            }).map(({ navio: n, bloco: b, key }) => {
+            }).filter((item) => {
+              const s = parseDateToMs(item.bloco.inicioIso);
+              const e = parseDateToMs(item.bloco.fimIso);
+              return !isNaN(s) && !isNaN(e) && e > timelineStart.getTime() && s < timelineEnd.getTime();
+            }).sort((a, b) => {
+              const sA = parseDateToMs(a.bloco.inicioIso);
+              const sB = parseDateToMs(b.bloco.inicioIso);
+              return sA - sB;
+            });
+
+            const laneEndMs: number[] = [];
+            const itemsWithLane = allBlocks.map((item) => {
+              const s = parseDateToMs(item.bloco.inicioIso);
+              const e = parseDateToMs(item.bloco.fimIso);
+              let assignedLane = -1;
+              for (let l = 0; l < laneEndMs.length; l++) {
+                if (laneEndMs[l] <= s) {
+                  assignedLane = l;
+                  laneEndMs[l] = e;
+                  break;
+                }
+              }
+              if (assignedLane === -1) {
+                assignedLane = laneEndMs.length;
+                laneEndMs.push(e);
+              }
+              return { ...item, lane: assignedLane };
+            });
+
+            const hasMultiLane = laneEndMs.length > 1;
+
+            return itemsWithLane.map(({ navio: n, bloco: b, key, lane }) => {
               const bStartMs = parseDateToMs(b.inicioIso);
               const bEndMs = parseDateToMs(b.fimIso);
-              if (isNaN(bStartMs) || isNaN(bEndMs)) return null;
-
-              // Não renderiza se o bloco estiver completamente fora da escala selecionada
-              if (bEndMs <= timelineStart.getTime() || bStartMs >= timelineEnd.getTime()) {
-                return null;
-              }
-
               const leftPct = Math.max(0, Math.min(100, ((bStartMs - timelineStart.getTime()) / totalMs) * 100));
               const rightPct = Math.max(0, Math.min(100, ((bEndMs - timelineStart.getTime()) / totalMs) * 100));
               const widthPct = Math.max(0.4, rightPct - leftPct);
-
               if (rightPct <= 0 || leftPct >= 100) return null;
 
               const isOp = b.tipo === 'VERDE' || (n.status_cor === 'VERDE' && b.tipo === 'OPERACAO_DESATRACACAO');
               const overflowsRight = bEndMs > timelineEnd.getTime();
               const roundedMasterClass = overflowsRight ? 'rounded-l-lg rounded-r-none' : 'rounded-lg';
 
+              const topStyle = hasMultiLane
+                ? (lane === 0 ? 'top-0.5 h-4 text-[9px]' : 'bottom-0.5 h-4 text-[9px]')
+                : 'top-1.5 h-7 text-[10.5px]';
+
+              const bgClass = isOp
+                ? 'border border-emerald-400 bg-emerald-600 text-white shadow-md'
+                : 'border border-blue-400 bg-blue-600 dark:bg-sky-700 text-white shadow-md';
+
               return (
                 <div
                   key={key}
                   onClick={onSelectNavio ? () => onSelectNavio(n) : undefined}
-                  title={`${isOp ? 'Operando no Berço' : 'Previsão de Berço'}: ${n.nome_navio} (${b.duracaoHoras}h)`}
-                  className={`absolute h-8 border flex items-center justify-center px-2 text-[11px] font-bold ${
+                  title={`${isOp ? 'Operando no Berço' : 'Previsão de Berço'} (${bercoId === '101' ? 'Berço 101' : 'Berço 202'}): ${n.nome_navio} (${b.duracaoHoras}h)`}
+                  className={`absolute flex items-center justify-center px-1.5 font-bold ${
                     onSelectNavio ? 'cursor-pointer hover:brightness-125' : 'cursor-default'
-                  } z-20 overflow-hidden border border-emerald-400 bg-emerald-600 text-white shadow-md ${roundedMasterClass}`}
+                  } z-20 overflow-hidden ${bgClass} ${roundedMasterClass} ${topStyle}`}
                   style={{
                     left: `${leftPct}%`,
                     width: `${widthPct}%`,
                     minWidth: '10px'
                   }}
                 >
-                  <span className="truncate tracking-tight font-extrabold text-[11px] text-center uppercase">
+                  <span className="truncate tracking-tight font-extrabold text-center uppercase">
                     {isOp ? `OPERANDO: ${n.nome_navio}` : `PREVISÃO: #${n.ordem_fila} ${n.nome_navio}`}
                   </span>
-
                   {overflowsRight && (
-                    <span
-                      className="absolute right-0.5 top-1/2 -translate-y-1/2 font-black text-[9px] text-white/90 drop-shadow pointer-events-none select-none tracking-tighter"
-                      title="Continua além da escala visível"
-                    >
+                    <span className="absolute right-0.5 top-1/2 -translate-y-1/2 font-black text-[8px] text-white/90 drop-shadow pointer-events-none select-none">
                       ❯❯
                     </span>
                   )}
                 </div>
               );
-            })}
-          </div>
-        </div>
+            });
+          };
+
+          return (
+            <div className="sticky top-[118px] z-30 bg-white dark:bg-[#070d18] border-b border-slate-200 dark:border-cco-border shadow-sm flex flex-col shrink-0 divide-y divide-slate-200/60 dark:divide-cco-border/30">
+              {/* Barra de Título da Seção: OCUPAÇÃO DOS BERÇOS */}
+              <div className="flex h-5 items-center px-4 bg-slate-100 dark:bg-[#060c18] border-b border-slate-200/80 dark:border-cco-border/40 text-[9px] font-mono justify-between shrink-0">
+                <span className="font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center space-x-1.5">
+                  <span className="text-emerald-500">⚓</span>
+                  <span>OCUPAÇÃO DOS BERÇOS &bull; PORTO DE SÃO SEBASTIÃO (BERÇOS 101 - 204)</span>
+                </span>
+                <span className="text-slate-500 dark:text-slate-400 text-[8.5px] font-medium hidden sm:inline">
+                  Berço 101: Cais Comercial (Sequência Oficial da Fila) &bull; Berço 202: Cais Interno (Apoio / Cabotagem)
+                </span>
+              </div>
+
+              {/* TRILHO 1: BERÇO 101 (Cais Comercial - Sequência do Line-up) */}
+              <div className="flex h-10 items-center shrink-0">
+                <div className="w-[26.5rem] min-w-[26.5rem] px-4 py-1.5 bg-white dark:bg-[#070d18] border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-30 h-full">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-emerald-500 dark:text-emerald-400 font-extrabold text-sm">⚓</span>
+                    <div>
+                      <div className="font-extrabold text-xs text-slate-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+                        <span className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.2 rounded font-black tracking-wide">
+                          BERÇO 101
+                        </span>
+                        <span className="text-[10px] text-slate-700 dark:text-slate-300 font-bold">Cais Comercial</span>
+                      </div>
+                      <div className="text-[9px] text-emerald-600 dark:text-emerald-400 font-mono font-medium">
+                        Sequência Oficial &bull; Fila Contínua
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[9px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 font-mono font-bold px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-500/40">
+                    Fila Contínua
+                  </span>
+                </div>
+
+                <div className="flex-1 relative flex items-center h-full bg-white dark:bg-[#070d18]">
+                  <div className="absolute inset-0 flex pointer-events-none">
+                    {daysList.map((day, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex-1 border-r ${
+                          day.isWeekend ? 'bg-slate-100 dark:bg-slate-900/40 border-slate-200 dark:border-cco-border/30' : 'border-slate-100 dark:border-cco-border/15'
+                        }`}
+                      ></div>
+                    ))}
+                  </div>
+
+                  {isAgoraVisible && (
+                    <div
+                      className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] -translate-x-1/2"
+                      style={{ left: `${agoraPercent}%` }}
+                    ></div>
+                  )}
+
+                  {renderBercoTrack('101')}
+                </div>
+              </div>
+
+              {/* TRILHO 2: BERÇO 202 (Cais Interno - Operações Simultâneas / Apoio) */}
+              <div className="flex h-10 items-center shrink-0">
+                <div className="w-[26.5rem] min-w-[26.5rem] px-4 py-1.5 bg-white dark:bg-[#070d18] border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-30 h-full">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-cyan-500 dark:text-cyan-400 font-extrabold text-sm">⚓</span>
+                    <div>
+                      <div className="font-extrabold text-xs text-slate-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+                        <span className="bg-cyan-600 text-white text-[9px] px-1.5 py-0.2 rounded font-black tracking-wide">
+                          BERÇO 202
+                        </span>
+                        <span className="text-[10px] text-slate-700 dark:text-slate-300 font-bold">Cais Interno</span>
+                      </div>
+                      <div className="text-[9px] text-cyan-600 dark:text-cyan-400 font-mono font-medium">
+                        Operações Simultâneas / Apoio
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[9px] bg-cyan-50 text-cyan-700 dark:bg-cyan-950/80 dark:text-cyan-300 font-mono font-bold px-1.5 py-0.5 rounded border border-cyan-300 dark:border-cyan-500/40">
+                    Cais Interno
+                  </span>
+                </div>
+
+                <div className="flex-1 relative flex items-center h-full bg-white dark:bg-[#070d18]">
+                  <div className="absolute inset-0 flex pointer-events-none">
+                    {daysList.map((day, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex-1 border-r ${
+                          day.isWeekend ? 'bg-slate-100 dark:bg-slate-900/40 border-slate-200 dark:border-cco-border/30' : 'border-slate-100 dark:border-cco-border/15'
+                        }`}
+                      ></div>
+                    ))}
+                  </div>
+
+                  {isAgoraVisible && (
+                    <div
+                      className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] -translate-x-1/2"
+                      style={{ left: `${agoraPercent}%` }}
+                    ></div>
+                  )}
+
+                  {renderBercoTrack('202')}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 5. Linhas Horizontais dos Navios do Line-up */}
         <div className="relative flex-1 divide-y divide-slate-200 dark:divide-cco-border/30">
@@ -799,7 +909,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                         )}
                       </div>
 
-                      {/* Linha 1: Nome do Navio + Badge No Berço + Progresso % */}
+                      {/* Linha 1: Nome do Navio + Badge Berço + Badge No Berço + Progresso % */}
                       <div className="flex items-center space-x-1.5 min-w-0">
                         <span
                           className="font-extrabold text-sm text-slate-900 dark:text-slate-100 transition-colors truncate"
@@ -807,6 +917,23 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                         >
                           {navio.nome_navio}
                         </span>
+                        {/* Badge de Designação de Berço (Berço 101 ou Berço 202) */}
+                        {(() => {
+                          const bercoEfetivo = navio.berco || '101';
+                          const is101 = bercoEfetivo === '101';
+                          return (
+                            <span
+                              className={`text-[9px] px-1.5 py-0.2 rounded font-black tracking-wider border shrink-0 ${
+                                is101
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-500/40'
+                                  : 'bg-cyan-50 text-cyan-700 border-cyan-300 dark:bg-cyan-950/80 dark:text-cyan-300 dark:border-cyan-500/40'
+                              }`}
+                              title={`Designação Oficial: Berço ${bercoEfetivo} (${is101 ? 'Cais Comercial' : 'Cais Interno'})`}
+                            >
+                              B-{bercoEfetivo}
+                            </span>
+                          );
+                        })()}
                         {isOperating && (
                           <div className="flex items-center space-x-1 shrink-0">
                             <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 text-[9px] px-1.5 py-0.2 rounded font-bold border border-emerald-200 dark:border-emerald-500/40">
@@ -1155,7 +1282,14 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 Operando no Berço
               </span>
               <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
-                {operacional?.navios_em_operacao ?? (navios.filter(n => n.status_cor === 'VERDE').length)} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">ativo</span>
+                {(() => {
+                  const count = operacional?.navios_em_operacao ?? (navios.filter(n => n.status_cor === 'VERDE').length);
+                  return (
+                    <>
+                      {count} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">{count === 1 ? 'ativo' : 'ativos'}</span>
+                    </>
+                  );
+                })()}
               </span>
             </div>
           </div>

@@ -55,6 +55,7 @@ export interface NavioLineup {
   ultima_atualizacao?: string;
 
   // Campos calculados em tempo de execução pelo motor
+  berco?: string; // Berço designado ('101', '201', '202', etc.)
   duracao_estimada_horas?: number;
   duracao_base_horas?: number;
   horas_chuva?: number;

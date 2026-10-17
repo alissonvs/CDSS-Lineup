@@ -198,6 +198,7 @@ export async function initializeDatabase(): Promise<void> {
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS ajuste_praticagem_ativo INTEGER DEFAULT 1`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS calado_entrada DOUBLE PRECISION`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS calado_saida DOUBLE PRECISION`;
+    await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS berco TEXT`;
 
     // Inicialização retroativa: popula calados de entrada e saída a partir de calado
     await sql`

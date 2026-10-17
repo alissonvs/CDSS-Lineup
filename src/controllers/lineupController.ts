@@ -183,10 +183,6 @@ export async function updateNavioHandler(req: Request, res: Response): Promise<v
 
     if (body.status_cor) {
       statusCor = body.status_cor;
-      if (statusCor === 'VERDE') {
-        // Restrição CDSS: Apenas 1 navio simultâneo no cais comercial único
-        await sql`UPDATE lineup_navios SET status_cor = 'AZUL' WHERE status_cor = 'VERDE' AND id != ${id}`;
-      }
     } else if (existing.status_cor === 'VERDE') {
       statusCor = 'VERDE';
     } else {

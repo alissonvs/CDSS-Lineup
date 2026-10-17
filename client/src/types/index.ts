@@ -53,6 +53,7 @@ export interface NavioLineup {
   ais_sincronizado_em?: string | null;
   progresso_operacao?: number | null; // % de progresso da operação no berço (SISPORT)
   ultima_atualizacao?: string;
+  berco?: string; // Berço designado ('101', '201', '202', etc.)
 
   duracao_estimada_horas?: number;
   duracao_base_horas?: number;

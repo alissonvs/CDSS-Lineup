@@ -25,6 +25,7 @@ import {
   getPautaPraticagemHandler,
   syncPraticagemHandler
 } from '../controllers/praticagemController.js';
+import { identificarBercoPorCoordenadas } from '../services/bercoGeoService.js';
 import { APP_VERSION } from '../version.js';
 
 const router = Router();
@@ -60,6 +61,19 @@ router.get('/clima', getClimaHandler);
 router.get('/mares', getMaresHandler);
 router.get('/weather/tide/current', getCurrentTideHandler);
 router.get('/weather/rain/forecast', getRainForecastHandler);
+
+// Geofencing e Identificação Automática de Berços por Coordenadas AIS
+router.get('/bercos/identificar', (req, res) => {
+  const lat = parseFloat(req.query.lat as string);
+  const lon = parseFloat(req.query.lon as string);
+  const sog = req.query.sog ? parseFloat(req.query.sog as string) : undefined;
+  if (isNaN(lat) || isNaN(lon)) {
+    res.status(400).json({ success: false, error: 'Parâmetros lat e lon são obrigatórios.' });
+    return;
+  }
+  const resultado = identificarBercoPorCoordenadas(lat, lon, sog);
+  res.json({ success: true, data: resultado });
+});
 
 export default router;
 

@@ -7,6 +7,7 @@ import {
   normalizarNomeNavio, 
   jaroWinklerSimilarity 
 } from './navioMatcherService.js';
+import { identificarBercoPorCoordenadas } from './bercoGeoService.js';
 
 const SISPORT_URL = 'https://sisport.portoss.sp.gov.br/LineUp/ConsultaPublicaProgramacao.aspx';
 
@@ -155,9 +156,6 @@ export function parseSisportHtml(html: string): SisportParsedRow[] {
         const nomeNavio = cells[1].toUpperCase();
         const situacao = cells[13].toUpperCase();
 
-        // Ignora navios que já desatracaram completamente do porto
-        if (situacao === 'DESATRACADO') continue;
-
         let progressoPct: number | null = null;
         const pctAttrMatch = rowContent.match(/data-porcentagem=['"]([0-9.]+)['"]/i);
         if (pctAttrMatch) {
@@ -167,6 +165,14 @@ export function parseSisportHtml(html: string): SisportParsedRow[] {
           const cleanPct = cells[14].replace('%', '').replace(',', '.').trim();
           const parsed = parseFloat(cleanPct);
           if (!isNaN(parsed)) progressoPct = parsed;
+        }
+
+        // Ignora navios que já desatracaram completamente ou concluíram 100% da operação
+        if (
+          situacao === 'DESATRACADO' ||
+          (progressoPct !== null && progressoPct >= 100)
+        ) {
+          continue;
         }
 
         result.push({
@@ -223,19 +229,23 @@ function encontrarNavioExistente(
   );
   if (porNomeNorm) return porNomeNorm;
 
-  // 4. Busca por Similaridade Fonética/Jaro-Winkler de alta confiança (score >= 0.88)
+  // 4. Busca por Similaridade Fonética/Jaro-Winkler de altíssima confiança (score >= 0.94 e comprimentos compatíveis)
   let melhorScore = 0;
   let melhorMatch: any = undefined;
   for (const n of disponiveis) {
     if (!n.nome_navio) continue;
-    const score = jaroWinklerSimilarity(nomeNorm, normalizarNomeNavio(n.nome_navio));
+    const targetNorm = normalizarNomeNavio(n.nome_navio);
+    const lenRatio = Math.min(nomeNorm.length, targetNorm.length) / Math.max(nomeNorm.length, targetNorm.length);
+    if (lenRatio < 0.8) continue; // Evita falsos positivos como ATLANTIC ROSE vs ATLANTIS
+
+    const score = jaroWinklerSimilarity(nomeNorm, targetNorm);
     if (score > melhorScore) {
       melhorScore = score;
       melhorMatch = n;
     }
   }
 
-  if (melhorMatch && melhorScore >= 0.88) {
+  if (melhorMatch && melhorScore >= 0.94) {
     return melhorMatch;
   }
 
@@ -284,7 +294,7 @@ export async function sincronizarComSisportOficial(): Promise<{
   const idsProcessados = new Set<number>();
   const novosNavios: string[] = [];
   let ordemFila = 1;
-  let jaExisteVerde = false;
+  let operandoCount = 0;
 
   // Pontos geográficos reais de ancoragem e aproximação no Canal de São Sebastião (para novos navios)
   const fundeiosCoords = [
@@ -354,30 +364,17 @@ export async function sincronizarComSisportOficial(): Promise<{
     if (situacaoUpper === 'ATRACADO' || situacaoUpper === 'OPERANDO' || situacaoUpper.includes('OPERANDO') || situacaoUpper.includes('ATRACADO')) {
       statusCor = 'VERDE';
       livrePratica = 1;
-      jaExisteVerde = true;
     } else if (situacaoUpper === 'FUNDEADO' || situacaoUpper.includes('FUNDEADO')) {
-      if (existing?.status_cor === 'VERDE') {
-        statusCor = 'VERDE';
-        livrePratica = 1;
-        jaExisteVerde = true;
-      } else if (existing?.status_cor === 'CINZA') {
-        statusCor = 'CINZA';
-      } else {
-        statusCor = 'VERMELHO';
-      }
+      statusCor = (existing?.status_cor === 'CINZA') ? 'CINZA' : 'VERMELHO';
     } else if (item.situacao === 'PROGRAMADO') {
-      if (existing?.status_cor === 'VERDE') {
-        statusCor = 'VERDE';
-      } else if (existing?.status_cor === 'VERMELHO' || existing?.status_cor === 'CINZA') {
+      if (existing?.status_cor === 'VERMELHO' || existing?.status_cor === 'CINZA') {
         // Se a escala já está confirmada na barra (VERMELHO) ou com livre prática (CINZA), preserva o estado real!
         statusCor = existing.status_cor;
       } else {
         statusCor = (ordemFila <= 3 ? 'LARANJA' : 'AZUL');
       }
     } else {
-      if (existing?.status_cor === 'VERDE') {
-        statusCor = 'VERDE';
-      } else if (existing?.status_cor === 'VERMELHO' || existing?.status_cor === 'CINZA') {
+      if (existing?.status_cor === 'VERMELHO' || existing?.status_cor === 'CINZA') {
         statusCor = existing.status_cor;
       } else {
         statusCor = 'AZUL';
@@ -402,9 +399,16 @@ export async function sincronizarComSisportOficial(): Promise<{
       latitude = existing.latitude;
       longitude = existing.longitude;
     } else if (statusCor === 'VERDE') {
-      // Navio atracado sem coordenadas prévias: berço comercial de São Sebastião (CDSS)
-      latitude = -23.8112;
-      longitude = -45.3971;
+      // Navios atracados sem coordenadas prévias: distribui ao longo dos berços de São Sebastião (CDSS)
+      const bercoCoords = [
+        { lat: -23.8114, lon: -45.3974 }, // Berço 101 Sul
+        { lat: -23.8109, lon: -45.3968 }, // Berço 101 Norte / 201
+        { lat: -23.8105, lon: -45.3971 }  // Berço 202
+      ];
+      const coordEscolhida = bercoCoords[operandoCount % bercoCoords.length];
+      latitude = coordEscolhida.lat;
+      longitude = coordEscolhida.lon;
+      operandoCount++;
     } else {
       // Navio novo sem coordenadas prévias: atribui ponto de fundeio inicial
       latitude = fundeiosCoords[i % fundeiosCoords.length].lat;
@@ -442,6 +446,18 @@ export async function sincronizarComSisportOficial(): Promise<{
       ? (existing?.fim_atracacao || null)
       : (existing?.fim_atracacao || null);
 
+    // Identificação inteligente do berço por telemetria e geofencing
+    let bercoFinal: string | null = null;
+    if (statusCor === 'VERDE' && latitude && longitude) {
+      const bercoGeo = identificarBercoPorCoordenadas(latitude, longitude);
+      if (bercoGeo) {
+        bercoFinal = bercoGeo.berco;
+      }
+    }
+    if (!bercoFinal && existing?.berco) {
+      bercoFinal = existing.berco;
+    }
+
     if (existing) {
       // ==========================================
       // UPDATE INCREMENTAL (NAVIO EXISTENTE NA BASE)
@@ -454,7 +470,7 @@ export async function sincronizarComSisportOficial(): Promise<{
       await sql`
         UPDATE lineup_navios SET
           imo = ${imo},
-          nome_navio = ${existing.nome_navio || item.navio},
+          nome_navio = ${item.navio},
           tipo_navio = ${tipoNavio},
           mercadoria = ${item.mercadoria},
           volume_t = ${item.peso_ton > 0 ? item.peso_ton : existing.volume_t},
@@ -464,6 +480,7 @@ export async function sincronizarComSisportOficial(): Promise<{
           agencia = ${item.agencia || existing.agencia},
           ordem_fila = ${novaOrdem},
           status_cor = ${statusCor},
+          berco = ${bercoFinal},
           livre_pratica_ok = ${livrePratica},
           armazem_publico = ${armazemPublico},
           eta_previsto = ${etaFormatado},
@@ -484,12 +501,12 @@ export async function sincronizarComSisportOficial(): Promise<{
       const [inserted] = await sql`
         INSERT INTO lineup_navios (
           imo, nome_navio, tipo_navio, mercadoria, volume_t, loa, dwt, calado, agencia,
-          ordem_fila, status_cor, livre_pratica_ok, armazem_publico, eta_previsto, eta_ais,
+          ordem_fila, status_cor, berco, livre_pratica_ok, armazem_publico, eta_previsto, eta_ais,
           chegada_fundeio, inicio_atracacao, fim_atracacao, latitude, longitude, sinal_antena, ais_sincronizado_em,
           progresso_operacao, ultima_atualizacao
         ) VALUES (
           ${imo}, ${item.navio}, ${tipoNavio}, ${item.mercadoria}, ${item.peso_ton}, ${loa},
-          ${dwt}, ${calado}, ${item.agencia}, ${novaOrdem}, ${statusCor}, ${livrePratica},
+          ${dwt}, ${calado}, ${item.agencia}, ${novaOrdem}, ${statusCor}, ${bercoFinal}, ${livrePratica},
           ${armazemPublico}, ${etaFormatado}, null,
           ${chegadaFundeio}, ${inicioAtracacao}, ${fimAtracacao},
           ${latitude}, ${longitude}, null, null,

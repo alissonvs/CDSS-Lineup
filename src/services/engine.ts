@@ -11,6 +11,7 @@ import {
   sincronizarTabuaMaresNoBanco,
   obterCaladosOperacionaisNavio
 } from './tideService.js';
+import { identificarBercoPorCoordenadas } from './bercoGeoService.js';
 
 const DELTA_T_MANOBRA = 2.0; // Constante regulamentar CDSS (2,0 horas de folga de manobra)
 
@@ -219,23 +220,25 @@ export async function calcularDesatracacaoDinamicaNavioVerde(
 
   // Cenário 3: Fallback padrão (progresso = 0% ou não informado)
   const duracaoBaseHoras = Math.round((volumeTotal / pmdHoraTeorica) * 10) / 10;
-  const fimProvisorio = new Date(berthedAtMs + (duracaoBaseHoras + DELTA_T_MANOBRA) * 3600000);
-  let horasChuva = 0;
+  let horasChuvaFutura = 0;
+  const fimProvisorio = new Date(nowMs + (duracaoBaseHoras + DELTA_T_MANOBRA) * 3600000);
   if (prancha.sensivel_chuva === 1) {
-    horasChuva = await obterHorasChuva(new Date(berthedAtMs), fimProvisorio);
+    horasChuvaFutura = await obterHorasChuva(agora, fimProvisorio);
   }
-  const tempoTotalHoras = duracaoBaseHoras + horasChuva + DELTA_T_MANOBRA;
-  const etdMs = berthedAtMs + Math.max(8, tempoTotalHoras) * 3600000;
-  const tempoRestante = Math.max(1, Math.round(((etdMs - nowMs) / 3600000) * 10) / 10);
+  const tempoRestanteTotalHoras = Math.round((duracaoBaseHoras + horasChuvaFutura + DELTA_T_MANOBRA) * 10) / 10;
+  // Como o navio está atracado operando no berço com 0% ou início de operação,
+  // todo o volume ainda pendente precisa ser operado a partir do presente:
+  const etdMs = nowMs + tempoRestanteTotalHoras * 3600000;
+  const duracaoTotalGeral = Math.round(((etdMs - berthedAtMs) / 3600000) * 10) / 10;
 
   return {
     etdProjetadoMs: etdMs,
     duracaoBaseHoras,
-    horasChuva,
-    duracaoTotalHoras: Math.round(tempoTotalHoras * 10) / 10,
+    horasChuva: horasChuvaFutura,
+    duracaoTotalHoras: duracaoTotalGeral,
     volumeRestanteT: volumeTotal,
     taxaEfetivaTHora: Math.round(pmdHoraTeorica * 10) / 10,
-    tempoRestanteHoras: tempoRestante,
+    tempoRestanteHoras: tempoRestanteTotalHoras,
     metodo: 'TEORICO'
   };
 }
@@ -276,7 +279,13 @@ export async function recalcularLineupComMotor(): Promise<{
   operacional: ResumoOperacional;
 }> {
   const sql = getDatabase();
-  const rawNavios = (await sql<NavioLineup[]>`SELECT * FROM lineup_navios ORDER BY ordem_fila ASC`) as NavioLineup[];
+  const rawNavios = (
+    await sql<NavioLineup[]>`
+      SELECT * FROM lineup_navios 
+      WHERE COALESCE(progresso_operacao, 0) < 100
+      ORDER BY ordem_fila ASC
+    `
+  ) as NavioLineup[];
 
   const pranchas = await obterPranchas();
 
@@ -322,25 +331,34 @@ export async function recalcularLineupComMotor(): Promise<{
     });
   };
 
-  // Identifica se um navio tem manobra de entrada agendada especificamente para o CAIS comercial
+  // Verifica se o local refere-se a berços do Porto Público de São Sebastião (CDSS: Cais Comercial, Cais Interno, etc.)
+  const isBercoPortoPublico = (loc?: string | null) => {
+    if (!loc) return true; // Se não especificado, assume berço do porto
+    const l = loc.trim().toUpperCase();
+    if (/^P[1-4]$/.test(l)) return false; // Píeres Tebar/Petrobras (P1 a P4)
+    if (/^F[1-7]$/.test(l) || l.includes('FUNDEIO') || l.includes('BARRA')) return false; // Barra / Fundeio
+    return l.includes('CAIS') || l.includes('CINT') || l.includes('101') || l.includes('20') || l.includes('CS') || l.includes('CN') || l.includes('PIER') || l === '';
+  };
+
+  // Identifica se um navio tem manobra de entrada agendada para berço do porto público (CAIS ou CINT)
   const getManobraEntradaCais = (n: NavioLineup) => {
     const mbs = getManobrasNavio(n);
     return mbs.find((m) => {
       if (m.categoria === 'CANCELADAS') return false;
       const ehEntrada = m.tipo_manobra === 'E';
-      const ehMudancaCais = m.tipo_manobra === 'M' && (m.local_destino || '').toUpperCase().includes('CAIS');
-      const entraNoCais = (m.local_origem || '').toUpperCase().includes('CAIS') || (m.local_destino || '').toUpperCase().includes('CAIS');
+      const ehMudancaCais = m.tipo_manobra === 'M' && isBercoPortoPublico(m.local_destino);
+      const entraNoCais = isBercoPortoPublico(m.local_destino) || (ehEntrada && isBercoPortoPublico(m.local_origem));
       return (ehEntrada && entraNoCais) || ehMudancaCais;
     });
   };
 
-  // Identifica manobra de saída (desatracação) do CAIS comercial
+  // Identifica manobra de saída (desatracação) de berço do porto público (CAIS ou CINT)
   const getManobraSaidaCais = (n: NavioLineup) => {
     const mbs = getManobrasNavio(n);
     return mbs.find((m) => {
       if (m.categoria === 'CANCELADAS') return false;
       const ehSaida = m.tipo_manobra === 'S';
-      const saiDoCais = !m.local_origem || (m.local_origem || '').toUpperCase().includes('CAIS');
+      const saiDoCais = isBercoPortoPublico(m.local_origem);
       return ehSaida && saiDoCais;
     });
   };
@@ -349,13 +367,13 @@ export async function recalcularLineupComMotor(): Promise<{
   const agora = new Date();
   const nowMs = agora.getTime();
 
-  // 1. Identificar o navio atualmente no berço (status_cor = 'VERDE')
-  // Restrição CDSS: No máximo 1 navio simultâneo operando no berço comercial único
-  const navioVerde = rawNavios.find((n) => n.status_cor === 'VERDE');
+  // 1. Identificar todos os navios atualmente no berço (status_cor = 'VERDE')
+  // Suporte pleno a múltiplas operações simultâneas (ex: 2 ou mais navios atracados operando)
+  const naviosVerdes = rawNavios.filter((n) => n.status_cor === 'VERDE');
+  const idsVerdes = new Set(naviosVerdes.map((n) => n.id));
 
   // Navios aguardando na fila (todos os não-verdes)
-  const naviosFila = rawNavios
-    .filter((n) => !navioVerde || n.id !== navioVerde.id);
+  const naviosFila = rawNavios.filter((n) => !idsVerdes.has(n.id));
 
   // Ordenação inteligente da fila de espera para evitar ociosidade no cais:
   // Navios com manobra de entrada no CAIS agendada na Praticagem têm prioridade absoluta de berço!
@@ -397,16 +415,71 @@ export async function recalcularLineupComMotor(): Promise<{
     return etaA - etaB || (a.ordem_fila || 999) - (b.ordem_fila || 999);
   });
 
-  let navioVerdeProcessado: NavioLineup | null = null;
+  const naviosVerdesProcessados: NavioLineup[] = [];
+  const finsAtracacaoVerdesMs: number[] = [];
   const naviosFilaProcessados: NavioLineup[] = [];
   let totalHorasOcupadasBerco = 0;
   let totalVolumeT = 0;
   let ultimoFimBerco: Date;
 
-  // 2. Processar o navio que já está no berço comercial (Verde = Ordem #1)
-  if (navioVerde) {
-    const navio: NavioLineup = { ...navioVerde };
+  // 2. Processar todos os navios que já estão operando no cais (status_cor = 'VERDE')
+  for (const itemVerde of naviosVerdes) {
+    const navio: NavioLineup = { ...itemVerde };
     totalVolumeT += navio.volume_t || 0;
+
+    // Determinação dinâmica do berço para navios atracados (status_cor = 'VERDE'):
+    // 1. PRIORIDADE MÁXIMA: Identificação automática por Geofencing e Telemetria AIS (Lat, Lon)
+    if (!navio.berco && navio.latitude && navio.longitude && !(navio.latitude === 0 && navio.longitude === 0)) {
+      const bercoGeo = identificarBercoPorCoordenadas(navio.latitude, navio.longitude);
+      if (bercoGeo && bercoGeo.dentroTolerancia) {
+        navio.berco = bercoGeo.berco;
+      }
+    }
+
+    // 2. CORRELAÇÃO OFICIAL COM A PRATICAGEM DE SÃO SEBASTIÃO (SP Pilots)
+    if (!navio.berco) {
+      const resumoNavio = getResumoNavio(navio);
+      const entradaAtracada = resumoNavio.find((r) => r.tipo === 'ATRACADOS' || r.berco);
+      if (entradaAtracada?.berco) {
+        const b = entradaAtracada.berco.toUpperCase();
+        if (b.includes('CINT') || b.includes('202')) navio.berco = '202';
+        else if (b.includes('201')) navio.berco = '201';
+        else if (b.includes('203')) navio.berco = '203';
+        else if (b.includes('204')) navio.berco = '204';
+        else if (b.includes('CAIS') || b.includes('101')) navio.berco = '101';
+      }
+    }
+
+    if (!navio.berco) {
+      const manobras = getManobrasNavio(navio);
+      for (const m of manobras) {
+        const loc = `${m.local_destino || ''} ${m.local_origem || ''}`.toUpperCase();
+        if (loc.includes('CINT') || loc.includes('202')) {
+          navio.berco = '202';
+          break;
+        } else if (loc.includes('201')) {
+          navio.berco = '201';
+          break;
+        } else if (loc.includes('CAIS') || loc.includes('101')) {
+          navio.berco = '101';
+          break;
+        }
+      }
+    }
+
+    // 3. ALOCAÇÃO OPERACIONAL DINÂMICA POR CAPACIDADE E DISPONIBILIDADE DE BERÇO
+    if (!navio.berco) {
+      // Se o Berço 101 (Cais Comercial) já estiver ocupado por outra operação ativa,
+      // ou se o navio for de pequeno porte exclusivo para cais interno (LOA <= 80m e calado <= 6.0m):
+      const berco101Ocupado = naviosVerdesProcessados.some((v) => v.berco === '101');
+      if (berco101Ocupado) {
+        navio.berco = '202';
+      } else if ((navio.loa && navio.loa <= 80) && (navio.calado && navio.calado <= 6.0)) {
+        navio.berco = '202';
+      } else {
+        navio.berco = '101';
+      }
+    }
 
     // Tempo de início da operação no cais comercial:
     // Prioridade máxima: inicio_operacao (editado manualmente ou preenchido automaticamente via AIS)
@@ -417,7 +490,7 @@ export async function recalcularLineupComMotor(): Promise<{
     const manobrasVerde = getManobrasNavio(navio);
     const manobraAtracacaoVerde = manobrasVerde.find(
       (m) => (m.tipo_manobra === 'M' || m.tipo_manobra === 'E') &&
-             ((m.local_destino || '').toUpperCase().includes('CAIS') || (m.local_origem || '').toUpperCase().includes('CAIS'))
+             (isBercoPortoPublico(m.local_destino) || isBercoPortoPublico(m.local_origem))
     );
     const manobraSaidaVerde = getManobraSaidaCais(navio);
 
@@ -428,6 +501,7 @@ export async function recalcularLineupComMotor(): Promise<{
     if (manobraSaidaVerde?.calado && !navio.calado_saida) {
       navio.calado_saida = Number(manobraSaidaVerde.calado);
     }
+
     const caladosVerde = obterCaladosOperacionaisNavio(navio);
     navio.calado_entrada = caladosVerde.caladoEntrada;
     navio.calado_saida = caladosVerde.caladoSaida;
@@ -445,7 +519,7 @@ export async function recalcularLineupComMotor(): Promise<{
       }
     } else if (navio.inicio_atracacao) {
       const parsedInicio = parseDateIso(navio.inicio_atracacao);
-      if (parsedInicio && parsedInicio.getTime() <= nowMs - 4 * 3600 * 1000) {
+      if (parsedInicio && parsedInicio.getTime() <= nowMs) {
         berthedAtMs = parsedInicio.getTime();
       }
     }
@@ -484,19 +558,19 @@ export async function recalcularLineupComMotor(): Promise<{
       navio.origem_previsao_fim = 'CALCULADO';
     }
 
+    // SALVAGUARDA INVIOLÁVEL: Navio atracado operando NUNCA pode ter ETD no passado
+    // (deve ser no mínimo nowMs + folga residual de manobra de 1.5h)
+    etdProjetadoMs = Math.max(etdProjetadoMs, nowMs + 1.5 * 3600000);
+
     navio.volume_restante_t = resultadoDinamico.volumeRestanteT;
     navio.taxa_efetiva_t_hora = resultadoDinamico.taxaEfetivaTHora;
     navio.tempo_restante_horas = resultadoDinamico.tempoRestanteHoras;
 
     // Determinação precisa dos 4 Marcos Temporais do Navio no Berço
-    // Marco 3 (Início Operação):
     const m3 = berthedAtMs;
-    // Marco 4 (Desatracação Prevista):
     const m4 = etdProjetadoMs;
-    // Marco 2 (Chegada ao Fundeio):
     let m2 = navio.chegada_fundeio ? (parseDateIso(navio.chegada_fundeio)?.getTime() || (m3 - 28 * 3600000)) : (m3 - 28 * 3600000);
     if (m2 >= m3) m2 = m3 - 18 * 3600000;
-    // Marco 1 (Previsão Oficial SISPORT):
     let m1 = navio.eta_previsto ? (parseDateIso(navio.eta_previsto)?.getTime() || (m2 - 14 * 3600000)) : (m2 - 14 * 3600000);
     if (m1 >= m2) m1 = m2 - 14 * 3600000;
 
@@ -544,8 +618,6 @@ export async function recalcularLineupComMotor(): Promise<{
       { id: 'desatracacao', label: 'Prevista Desatracação', dataIso: toIsoUtc(new Date(m4)) }
     ];
 
-    ultimoFimBerco = new Date(etdProjetadoMs);
-
     const duracaoTotalGeral = Math.round(((etdProjetadoMs - berthedAtMs) / 3600000) * 10) / 10;
     navio.duracao_base_horas = duracaoBaseHoras;
     navio.horas_chuva = horasChuva;
@@ -556,16 +628,31 @@ export async function recalcularLineupComMotor(): Promise<{
     navio.blocos = blocos;
 
     totalHorasOcupadasBerco += duracaoTotalGeral;
-    navioVerdeProcessado = navio;
+    finsAtracacaoVerdesMs.push(etdProjetadoMs);
+    naviosVerdesProcessados.push(navio);
+  }
+
+  // Ancoragem determinística da fila de espera no Berço 101 (Cais Comercial):
+  // A sequência de navios da fila comercial aguarda a liberação do Berço 101 (navio operando em 101)
+  const naviosVerdes101 = naviosVerdesProcessados.filter((n) => n.berco === '101');
+  if (naviosVerdes101.length > 0) {
+    const fins101 = naviosVerdes101.map((n) => parseDateIso(n.fim_atracacao)?.getTime() || nowMs);
+    const proximaLiberacaoMs = Math.max(...fins101);
+    ultimoFimBerco = new Date(Math.max(nowMs, proximaLiberacaoMs));
+  } else if (finsAtracacaoVerdesMs.length > 0) {
+    const proximaLiberacaoMs = Math.min(...finsAtracacaoVerdesMs);
+    ultimoFimBerco = new Date(Math.max(nowMs, proximaLiberacaoMs));
   } else {
     ultimoFimBerco = agora;
   }
 
-  // 3. Processar estritamente os navios da fila em série temporal contínua (SEM SOBREPOSIÇÃO)
-  let cursorBercoMs = ultimoFimBerco.getTime() + DELTA_T_MANOBRA * 3600000;
+  // 3. Processar estritamente a sequência de navios da fila no Berço 101 (SEM SOBREPOSIÇÃO)
+  // A fila de espera NUNCA pode ser agendada no passado (mínimo: nowMs + manobra)
+  let cursorBercoMs = Math.max(nowMs, ultimoFimBerco.getTime() + DELTA_T_MANOBRA * 3600000);
 
   for (const n of naviosFila) {
     const navio: NavioLineup = { ...n };
+    navio.berco = '101'; // Toda a fila comercial sequencial é atendida no Berço 101
     totalVolumeT += navio.volume_t || 0;
 
     // Verificar se o navio consta como FUNDEADO na Praticagem
@@ -606,18 +693,18 @@ export async function recalcularLineupComMotor(): Promise<{
       const parsedPratEntrada = parseDateIso(manobraEntrada.horario_iso);
       if (parsedPratEntrada) {
         // Respeita a liberação física do berço pelo navio anterior (cursorBercoMs = fim do anterior + 2h)
-        inicioOperacaoMs = Math.max(cursorBercoMs, parsedPratEntrada.getTime());
+        inicioOperacaoMs = Math.max(nowMs, cursorBercoMs, parsedPratEntrada.getTime());
         navio.manobra_praticagem_id = manobraEntrada.id;
         navio.manobra_praticagem_str = `Entrada agendada na Praticagem (${manobraEntrada.categoria_label}): ${manobraEntrada.horario_str}`;
       }
     } else if (navio.inicio_operacao) {
       const parsedOp = parseDateIso(navio.inicio_operacao);
       if (parsedOp) {
-        inicioOperacaoMs = Math.max(cursorBercoMs, parsedOp.getTime());
+        inicioOperacaoMs = Math.max(nowMs, cursorBercoMs, parsedOp.getTime());
       }
     } else {
       const etaD = parseDateIso(navio.chegada_fundeio || navio.eta_previsto) || agora;
-      inicioOperacaoMs = Math.max(cursorBercoMs, etaD.getTime());
+      inicioOperacaoMs = Math.max(nowMs, cursorBercoMs, etaD.getTime());
     }
     const inicioOperacaoDate = new Date(inicioOperacaoMs);
 
@@ -741,14 +828,27 @@ export async function recalcularLineupComMotor(): Promise<{
   // Reatribuição rigorosa da numeração da fila sequencial:
   // Linha 1: Navio no berço (se houver)
   // Linha 2, 3, 4...: Sequência cronológica exata de atendimento no berço
-  const naviosProcessados: NavioLineup[] = [];
-  if (navioVerdeProcessado) {
-    navioVerdeProcessado.ordem_fila = 1;
-    naviosProcessados.push(navioVerdeProcessado);
-  }
+  // 4. REORDENAÇÃO FINAL EM CASCATA TEMPORAL ESTRITA (WATERFALL)
+  // Ordena os navios em operação pelo início de atracação
+  naviosVerdesProcessados.sort((a, b) => {
+    const startA = parseDateIso(a.inicio_atracacao)?.getTime() || 0;
+    const startB = parseDateIso(b.inicio_atracacao)?.getTime() || 0;
+    return startA - startB;
+  });
 
+  const naviosProcessados: NavioLineup[] = [];
+
+  // Atribui as primeiras ordens de fila (1, 2...) aos navios em operação
+  naviosVerdesProcessados.forEach((item, index) => {
+    item.ordem_fila = index + 1;
+    item.restricao_mare = analisarRestricaoMareNavio(item, item.inicio_atracacao, item.fim_atracacao);
+    naviosProcessados.push(item);
+  });
+
+  // Navios da fila continuam a numeração subsequente (k+1, k+2...)
+  const offsetFila = naviosVerdesProcessados.length;
   naviosFilaProcessados.forEach((item, index) => {
-    item.ordem_fila = navioVerdeProcessado ? index + 2 : index + 1;
+    item.ordem_fila = offsetFila + index + 1;
     const rest = analisarRestricaoMareNavio(item, item.inicio_atracacao, item.fim_atracacao);
     item.restricao_mare = rest;
 
@@ -775,6 +875,7 @@ export async function recalcularLineupComMotor(): Promise<{
         UPDATE lineup_navios SET
           ordem_fila = ${n.ordem_fila},
           status_cor = ${n.status_cor},
+          berco = ${n.berco ?? null},
           calado = ${n.calado ?? null},
           calado_entrada = ${n.calado_entrada ?? null},
           calado_saida = ${n.calado_saida ?? null},

@@ -260,7 +260,14 @@ export class PraticagemService {
           const hMatch = horarioStr.match(/^(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
           if (hMatch) {
             const [, d, m, h, min] = hMatch;
-            horarioIso = `2026-${m}-${d}T${h}:${min}:00-03:00`;
+            const agora = new Date();
+            const anoAtual = agora.getFullYear();
+            const mesAtual = agora.getMonth() + 1;
+            const mesManobra = parseInt(m, 10);
+            let ano = anoAtual;
+            if (mesAtual === 12 && mesManobra === 1) ano = anoAtual + 1;
+            else if (mesAtual === 1 && mesManobra === 12) ano = anoAtual - 1;
+            horarioIso = `${ano}-${m}-${d}T${h}:${min}:00-03:00`;
           }
 
           const imo = detalhes?.['IMO NUMBER'] || null;
@@ -300,7 +307,16 @@ export class PraticagemService {
           if (n && n !== 'AGUARDADOS') {
             let iso = '';
             const m = d.match(/^(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
-            if (m) iso = `2026-${m[2]}-${m[1]}T${m[3]}:${m[4]}:00-03:00`;
+            if (m) {
+              const agora = new Date();
+              const anoAtual = agora.getFullYear();
+              const mesAtual = agora.getMonth() + 1;
+              const mesManobra = parseInt(m[2], 10);
+              let ano = anoAtual;
+              if (mesAtual === 12 && mesManobra === 1) ano = anoAtual + 1;
+              else if (mesAtual === 1 && mesManobra === 12) ano = anoAtual - 1;
+              iso = `${ano}-${m[2]}-${m[1]}T${m[3]}:${m[4]}:00-03:00`;
+            }
             aguardadosList.push({
               tipo: 'AGUARDADOS',
               navio: n,

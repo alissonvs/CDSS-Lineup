@@ -435,7 +435,7 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
             </div>
             <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
               <span style="background: ${color}22; color: ${color}; border: 1px solid ${color}66; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px; white-space: nowrap;">
-                ${getStatusLabel(navio.status_cor)}
+                ${getStatusLabel(navio.status_cor)}${navio.berco ? ` &bull; Berço ${navio.berco}` : ''}
               </span>
               <span style="font-size: 10px; color: #64748b; font-family: monospace;">
                 Fila #${navio.ordem_fila}
@@ -646,8 +646,15 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">Berço CDSS:</span>
-            <span className="text-emerald-600 dark:text-emerald-400 font-bold">Cais Comercial (Ativo)</span>
+            <span className="text-slate-500">Operando no Cais:</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold truncate max-w-[190px]" title={navios.filter(n => n.status_cor === 'VERDE').map(n => n.nome_navio).join(', ')}>
+              {(() => {
+                const emOp = navios.filter(n => n.status_cor === 'VERDE');
+                if (emOp.length === 0) return 'Livre (Aguardando)';
+                if (emOp.length === 1) return `${emOp[0].nome_navio}`;
+                return `${emOp.length} Embarcações Ativas`;
+              })()}
+            </span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-500">Navios no Canal:</span>
