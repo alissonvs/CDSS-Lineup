@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { useTheme } from '../context/ThemeContext';
 import type { NavioLineup, StatusCor } from '../types';
+import { BERCOS_SAO_SEBASTIAO } from '../data/bercosData';
 
 interface CanalMapProps {
   navios: NavioLineup[];
@@ -67,9 +68,11 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const apoLayerRef = useRef<L.GeoJSON | null>(null);
+  const berthsLayerRef = useRef<L.LayerGroup | null>(null);
 
   const [activeBasemap, setActiveBasemap] = useState<BasemapStyle>(theme === 'light' ? 'positron' : 'dark');
   const [showApo, setShowApo] = useState<boolean>(true);
+  const [showBerths, setShowBerths] = useState<boolean>(true);
   const [apoTotalAnexos, setApoTotalAnexos] = useState<number>(13);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
 
@@ -95,6 +98,10 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
     });
 
     L.control.zoom({ position: 'topright' }).addTo(map);
+
+    // Cria Pane dedicada para os Berços (zIndex 420: abaixo de markers 600, acima dos tiles 400)
+    const berthsPane = map.createPane('berthsPane');
+    berthsPane.style.zIndex = '420';
 
     // TileLayer inicial (Dark Matter com a chave autenticada do CARTO)
     const initialConfig = BASEMAP_OPTIONS.dark;
@@ -189,46 +196,76 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
         console.error('[CanalMap] Erro ao carregar GeoJSON da Área do Porto Organizado:', err);
       });
 
-    // Traçado vetorial em destaque da face do Cais Comercial (210m)
-    // Face de acostagem estende-se por 210m entre [-23.81165, -45.39767] e [-23.81071, -45.39661]
-    const caisLineCoords: [number, number][] = [
-      [-23.81165, -45.39767],
-      [-23.81071, -45.39661]
-    ];
+    // Traçado vetorial e identificadores dos Berços de São Sebastião (101 a 204)
+    const berthsLayerGroup = L.layerGroup();
 
-    const caisLine = L.polyline(caisLineCoords, {
-      color: '#10b981',
-      weight: 4,
-      opacity: 0.95
-    }).addTo(map);
+    BERCOS_SAO_SEBASTIAO.forEach((berco) => {
+      const isComercial = berco.tipo === 'comercial';
 
-    caisLine.bindTooltip(
-      `<div style="font-size: 11px; font-weight: bold; color: #10b981;">
-        Face de Acostagem &bull; Cais Comercial CDSS (210m)
-      </div>`,
-      { sticky: true, className: 'custom-map-tooltip' }
-    );
+      // Linha do Berço / Face de Acostagem
+      const polyline = L.polyline(berco.coords, {
+        color: berco.cor,
+        weight: isComercial ? 4 : 3.5,
+        opacity: 0.95,
+        pane: 'berthsPane'
+      });
 
-    caisLine.bindPopup(`
-      <div style="font-family: sans-serif; font-size: 12px; color: #f1f5f9; padding: 4px; min-width: 250px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 6px;">
-          <h4 style="font-weight: bold; color: #34d399; margin: 0; font-size: 13px;">
-            Cais Comercial CDSS (Berço 101)
-          </h4>
-          <span style="font-size: 10px; background: #064e3b; color: #34d399; padding: 2px 6px; border-radius: 4px; font-weight: 600;">
-            Cais Único
-          </span>
+      polyline.bindTooltip(
+        `<div style="font-size: 11.5px; font-weight: bold; color: ${berco.cor};">
+          ${berco.nome} &bull; ${berco.extensao_m}m
         </div>
-        <p style="margin: 0; color: #94a3b8; font-size: 11.5px;">Porto de São Sebastião &bull; Cais Comercial</p>
-        <div style="display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #94a3b8; background: #0b1120; padding: 6px; border-radius: 6px; border: 1px solid #1e293b; margin-top: 6px;">
-          <div><span style="color: #64748b;">Extensão Homologada:</span> <strong style="color: #cbd5e1;">210 m</strong></div>
-          <div><span style="color: #64748b;">Calado Homologado:</span> <strong style="color: #38bdf8;">8,50 m (ZH)</strong></div>
-          <div><span style="color: #64748b;">Profundidade de Projeto:</span> <strong style="color: #cbd5e1;">10,00 m (ZH)</strong></div>
-          <div><span style="color: #64748b;">Bordo de Atracação:</span> <strong style="color: #cbd5e1;">Bombordo / Boreste</strong></div>
-          <div><span style="color: #64748b;">Jurisdição:</span> <strong style="color: #10b981;">Poligonal Área 1 (Anexo IX)</strong></div>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 1px;">
+          Calado Máx: <strong style="color: #38bdf8;">${berco.calado_max_m}m</strong> &bull; Prof: <strong style="color: #cbd5e1;">${berco.profundidade_zh_m}m (ZH)</strong>
+        </div>`,
+        { sticky: true, className: 'custom-map-tooltip' }
+      );
+
+      polyline.bindPopup(`
+        <div style="font-family: sans-serif; font-size: 12px; color: #f1f5f9; padding: 4px; min-width: 260px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 6px;">
+            <h4 style="font-weight: bold; color: ${berco.cor}; margin: 0; font-size: 13px;">
+              ${berco.nome}
+            </h4>
+            <span style="font-size: 10px; background: ${isComercial ? '#064e3b' : '#0c4a6e'}; color: ${berco.cor}; padding: 2px 6px; border-radius: 4px; font-weight: 600;">
+              ${isComercial ? 'Cais Comercial' : 'Cais Interno'}
+            </span>
+          </div>
+          <p style="margin: 0 0 6px 0; color: #94a3b8; font-size: 11.5px; line-height: 1.3;">${berco.descricao}</p>
+          <div style="display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #94a3b8; background: #0b1120; padding: 6px; border-radius: 6px; border: 1px solid #1e293b;">
+            <div><span style="color: #64748b;">Extensão Homologada:</span> <strong style="color: #cbd5e1;">${berco.extensao_m} m</strong></div>
+            <div><span style="color: #64748b;">Calado Máximo:</span> <strong style="color: #38bdf8;">${berco.calado_max_m} m (ZH)</strong></div>
+            <div><span style="color: #64748b;">Profundidade de Projeto:</span> <strong style="color: #cbd5e1;">${berco.profundidade_zh_m} m (ZH)</strong></div>
+            ${berco.bordo ? `<div><span style="color: #64748b;">Bordo de Atracação:</span> <strong style="color: #cbd5e1;">${berco.bordo}</strong></div>` : ''}
+            <div style="margin-top: 2px; padding-top: 3px; border-top: 1px solid #1e293b;"><span style="color: #64748b;">Operações:</span> <span style="color: #e2e8f0;">${berco.operacoes}</span></div>
+          </div>
         </div>
-      </div>
-    `);
+      `);
+
+      // Badge numérico não obstrutivo posicionado com recuo terrestre (inland offset)
+      const badgeIcon = L.divIcon({
+        className: 'berth-badge-container',
+        html: `
+          <div class="berth-badge berth-badge-${berco.tipo}">
+            <span>${berco.numero}</span>
+          </div>
+        `,
+        iconSize: [32, 18],
+        iconAnchor: [16, 9],
+        pane: 'berthsPane'
+      });
+
+      const badgeMarker = L.marker(berco.labelCoord, {
+        icon: badgeIcon,
+        interactive: false,
+        pane: 'berthsPane'
+      });
+
+      berthsLayerGroup.addLayer(polyline);
+      berthsLayerGroup.addLayer(badgeMarker);
+    });
+
+    berthsLayerGroup.addTo(map);
+    berthsLayerRef.current = berthsLayerGroup;
 
     // Layer Group para os marcadores de navios
     const markersLayer = L.layerGroup().addTo(map);
@@ -275,7 +312,22 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
     }
   }, [showApo]);
 
-  // 4. Atualiza marcadores de navios quando o line-up mudar
+  // 4. Controle de Visibilidade dos Berços (101 a 204)
+  useEffect(() => {
+    if (!mapInstanceRef.current || !berthsLayerRef.current) return;
+
+    if (showBerths) {
+      if (!mapInstanceRef.current.hasLayer(berthsLayerRef.current)) {
+        mapInstanceRef.current.addLayer(berthsLayerRef.current);
+      }
+    } else {
+      if (mapInstanceRef.current.hasLayer(berthsLayerRef.current)) {
+        mapInstanceRef.current.removeLayer(berthsLayerRef.current);
+      }
+    }
+  }, [showBerths]);
+
+  // 5. Atualiza marcadores de navios quando o line-up mudar
   useEffect(() => {
     if (!mapInstanceRef.current || !markersLayerRef.current) return;
 
@@ -504,6 +556,21 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
 
       {/* Controles Flutuantes no Canto Superior Direito */}
       <div className="absolute top-4 right-14 z-20 flex flex-wrap items-center gap-2 pointer-events-auto">
+        {/* Toggle dos Berços CDSS (101 a 204) */}
+        <button
+          onClick={() => setShowBerths(!showBerths)}
+          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border backdrop-blur-md shadow-lg transition-all cursor-pointer ${
+            showBerths
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/50 shadow-emerald-500/10 dark:shadow-emerald-500/20'
+              : 'bg-white/90 text-slate-600 border-slate-200 hover:text-slate-900 dark:bg-cco-panel/90 dark:text-slate-400 dark:border-cco-border dark:hover:text-slate-200'
+          }`}
+          title="Ativar/Desativar Identificação dos Berços (101 a 204)"
+        >
+          <span>⚓</span>
+          <span>Berços (101-204)</span>
+          <span className={`w-2 h-2 rounded-full ${showBerths ? 'bg-emerald-600 dark:bg-emerald-400 animate-pulse' : 'bg-slate-400 dark:bg-slate-600'}`} />
+        </button>
+
         {/* Toggle da Poligonal Oficial (KMZ / Portaria 501/2019) */}
         <button
           onClick={() => setShowApo(!showApo)}
@@ -599,9 +666,23 @@ export const CanalMap: React.FC<CanalMapProps> = ({ navios, onSelectNavio }) => 
           </div>
         </div>
 
+        {/* Mini Legenda Rápida dos Berços e Poligonal */}
+        {showBerths && (
+          <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-cco-border/50 grid grid-cols-2 gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+            <div className="flex items-center space-x-1.5">
+              <span className="w-2.5 h-1.5 rounded bg-emerald-500"></span>
+              <span className="truncate">Berço 101 (Comercial)</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="w-2.5 h-1.5 rounded bg-cyan-400"></span>
+              <span className="truncate">Berços 201-204 (Internos)</span>
+            </div>
+          </div>
+        )}
+
         {/* Mini Legenda Rápida da Poligonal */}
         {showApo && (
-          <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-cco-border/50 grid grid-cols-2 gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+          <div className="mt-2 pt-2 border-t border-slate-200 dark:border-cco-border/50 grid grid-cols-2 gap-1 text-[10px] text-slate-500 dark:text-slate-400">
             <div className="flex items-center space-x-1.5">
               <span className="w-2.5 h-2 rounded bg-sky-400/40 border border-sky-500"></span>
               <span>Águas Portuárias</span>
