@@ -1,6 +1,6 @@
 import https from 'https';
 import { getDatabase } from '../database/connection.js';
-import { recalcularLineupComMotor } from './engine.js';
+import { recalcularLineupComMotor, finalizarSnapshotPrevisao } from './engine.js';
 import { NavioLineup, StatusCor } from '../types/index.js';
 import { 
   atualizarImosLineupComCatalogo, 
@@ -106,7 +106,7 @@ function cleanText(html: string): string {
 /**
  * Converte string no formato numérico brasileiro (ex: 27.000,000) para number
  */
-function parseBrNumber(valStr: string): number {
+export function parseBrNumber(valStr: string): number {
   if (!valStr) return 0;
   const cleaned = valStr.replace(/\./g, '').replace(',', '.');
   const num = parseFloat(cleaned);
@@ -116,7 +116,7 @@ function parseBrNumber(valStr: string): number {
 /**
  * Converte data DD/MM/AAAA para formato ISO com fuso oficial de Brasília (AAAA-MM-DDTHH:mm:ss-03:00)
  */
-function parseBrDate(dateStr: string, horaPadrao = '12:00:00'): string {
+export function parseBrDate(dateStr: string, horaPadrao = '12:00:00'): string {
   if (!dateStr || !dateStr.includes('/')) {
     return new Date().toISOString();
   }
@@ -157,14 +157,24 @@ export function parseSisportHtml(html: string): SisportParsedRow[] {
         const situacao = cells[13].toUpperCase();
 
         let progressoPct: number | null = null;
-        const pctAttrMatch = rowContent.match(/data-porcentagem=['"]([0-9.]+)['"]/i);
+        const pctAttrMatch = rowContent.match(/(?:data-porcentagem|data-progress|aria-valuenow)=['"]([0-9.,]+)['"]/i);
         if (pctAttrMatch) {
-          const parsed = parseFloat(pctAttrMatch[1]);
+          const parsed = parseFloat(pctAttrMatch[1].replace(',', '.'));
           if (!isNaN(parsed)) progressoPct = parsed;
-        } else if (cells[14]) {
-          const cleanPct = cells[14].replace('%', '').replace(',', '.').trim();
-          const parsed = parseFloat(cleanPct);
-          if (!isNaN(parsed)) progressoPct = parsed;
+        }
+
+        if (progressoPct === null) {
+          // Busca em células da linha que contenham o símbolo %
+          for (let c = 12; c < cells.length; c++) {
+            if (cells[c] && cells[c].includes('%')) {
+              const cleanPct = cells[c].replace('%', '').replace(',', '.').trim();
+              const parsed = parseFloat(cleanPct);
+              if (!isNaN(parsed)) {
+                progressoPct = parsed;
+                break;
+              }
+            }
+          }
         }
 
         // Ignora navios que já desatracaram completamente ou concluíram 100% da operação
@@ -281,6 +291,15 @@ export async function sincronizarComSisportOficial(): Promise<{
 
   // Carrega navios existentes no banco para mesclagem não-destrutiva
   const naviosDb = (await sql`SELECT * FROM lineup_navios ORDER BY ordem_fila ASC, id ASC`) as any[];
+
+  // Salvaguarda contra sincronização parcial ou truncada do SISPORT:
+  // Se o banco já possuía navios ativos (> 5) e a nova leitura trouxe uma queda drástica (< 50%),
+  // aborta a sincronização para evitar expurgo de dados válidos decorrente de instabilidade na página.
+  if (naviosDb.length > 5 && parsedRows.length < Math.floor(naviosDb.length * 0.5)) {
+    throw new Error(
+      `[SisportSync Salvaguarda] A leitura oficial retornou apenas ${parsedRows.length} embarcações, representando menos de 50% da base ativa (${naviosDb.length}). Sincronização abortada preventivamente para proteger a integridade dos dados.`
+    );
+  }
 
   // Carrega catálogo de navios oficial para resolução precisa de IMO
   const catalogoNaviosRows = (await sql`SELECT UPPER(nome) as nome_up, imo FROM navios`) as { nome_up: string; imo: string }[];
@@ -479,7 +498,9 @@ export async function sincronizarComSisportOficial(): Promise<{
           calado = ${calado},
           agencia = ${item.agencia || existing.agencia},
           ordem_fila = ${novaOrdem},
+          ordem_sisport = ${novaOrdem},
           status_cor = ${statusCor},
+          status_sisport = ${statusCor},
           berco = ${bercoFinal},
           livre_pratica_ok = ${livrePratica},
           armazem_publico = ${armazemPublico},
@@ -501,12 +522,12 @@ export async function sincronizarComSisportOficial(): Promise<{
       const [inserted] = await sql`
         INSERT INTO lineup_navios (
           imo, nome_navio, tipo_navio, mercadoria, volume_t, loa, dwt, calado, agencia,
-          ordem_fila, status_cor, berco, livre_pratica_ok, armazem_publico, eta_previsto, eta_ais,
+          ordem_fila, ordem_sisport, status_cor, status_sisport, berco, livre_pratica_ok, armazem_publico, eta_previsto, eta_ais,
           chegada_fundeio, inicio_atracacao, fim_atracacao, latitude, longitude, sinal_antena, ais_sincronizado_em,
           progresso_operacao, ultima_atualizacao
         ) VALUES (
           ${imo}, ${item.navio}, ${tipoNavio}, ${item.mercadoria}, ${item.peso_ton}, ${loa},
-          ${dwt}, ${calado}, ${item.agencia}, ${novaOrdem}, ${statusCor}, ${bercoFinal}, ${livrePratica},
+          ${dwt}, ${calado}, ${item.agencia}, ${novaOrdem}, ${novaOrdem}, ${statusCor}, ${statusCor}, ${bercoFinal}, ${livrePratica},
           ${armazemPublico}, ${etaFormatado}, null,
           ${chegadaFundeio}, ${inicioAtracacao}, ${fimAtracacao},
           ${latitude}, ${longitude}, null, null,
@@ -521,9 +542,32 @@ export async function sincronizarComSisportOficial(): Promise<{
   }
 
   // Remove com segurança apenas escalas antigas que não constam mais na programação do SISPORT (ex: navios desatracados)
+  // Preserva eventuais registros com previsão manual deliberada
   if (idsProcessados.size > 0) {
     const idsArray = Array.from(idsProcessados);
-    await sql`DELETE FROM lineup_navios WHERE NOT (id = ANY(${idsArray}))`;
+
+    // Finaliza snapshot de navios atracados que concluíram a operação e saíram da programação
+    try {
+      const saindo = await sql<{ imo: string }[]>`
+        SELECT imo FROM lineup_navios 
+        WHERE NOT (id = ANY(${idsArray}))
+          AND status_cor = 'VERDE'
+          AND (origem_previsao_fim IS NULL OR origem_previsao_fim != 'MANUAL')
+      `;
+      for (const s of saindo) {
+        if (s.imo) {
+          await finalizarSnapshotPrevisao(s.imo);
+        }
+      }
+    } catch (err) {
+      console.error('[SisportSync] Erro ao finalizar snapshots de navios desatracados:', err);
+    }
+
+    await sql`
+      DELETE FROM lineup_navios 
+      WHERE NOT (id = ANY(${idsArray}))
+        AND (origem_previsao_fim IS NULL OR origem_previsao_fim != 'MANUAL')
+    `;
   }
 
   // Enriquecimento inteligente de IMOs na tabela "navios"
@@ -531,8 +575,8 @@ export async function sincronizarComSisportOficial(): Promise<{
   const statsImos = await atualizarImosLineupComCatalogo();
   console.log(`[SisportSync] ✓ IMOs atualizados: ${statsImos.totalAtualizados} navios atualizados com base no catálogo oficial.`);
 
-  // Recalcula todas as janelas de berço e encadeamento operacional
-  const recalculado = await recalcularLineupComMotor();
+  // Recalcula todas as janelas de berço e encadeamento operacional (force refresh)
+  const recalculado = await recalcularLineupComMotor(true);
 
   return {
     totalSincronizados: parsedRows.length,

@@ -170,3 +170,21 @@ export function formatarDataBr(dateStr?: string | null, incluirFuso = false): st
     return dateStr;
   }
 }
+
+/**
+ * Formata data e hora no padrão conciso brasileiro (DD/MM HH:mm) para uso em cards compactos
+ */
+export function formatarDataHoraCurta(dateStr?: string | null): string {
+  if (!dateStr) return '-';
+  try {
+    const d = parseDateSafe(dateStr);
+    if (!d || isNaN(d.getTime())) return dateStr;
+    const dia = String(d.getDate()).padStart(2, '0');
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const hora = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${dia}/${mes} ${hora}:${min}`;
+  } catch {
+    return dateStr;
+  }
+}

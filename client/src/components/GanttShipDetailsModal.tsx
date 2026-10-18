@@ -420,6 +420,28 @@ export const GanttShipDetailsModal: React.FC<GanttShipDetailsModalProps> = ({
 
           {/* Card de Validação de Previsão: SISPORT Oficial vs Telemetria AIS */}
           {(() => {
+            const isOperating = navio.status_cor === 'VERDE';
+            if (isOperating) {
+              return (
+                <div className="p-3.5 rounded-xl border bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-500/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                        Status Operacional do Cais
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded border bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/60 dark:text-emerald-300 dark:border-emerald-500/40">
+                      EM OPERAÇÃO NO BERÇO
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    A embarcação já concluiu a atracação e encontra-se em operação regular no cais do porto.
+                  </p>
+                </div>
+              );
+            }
+
             const divergencia = verificarDivergenciaEta(navio.eta_previsto, navio.eta_ais);
             if (!navio.eta_ais) {
               return (

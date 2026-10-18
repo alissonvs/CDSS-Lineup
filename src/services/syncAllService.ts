@@ -124,7 +124,7 @@ export async function sincronizarTudoCdss(): Promise<SyncAllResult> {
 
   // ETAPA 3: Recálculo do Motor de Atracação CDSS
   console.log('[SyncAll] Recalculando motor de line-up e janelas de maré...');
-  const recalculado = await recalcularLineupComMotor();
+  const recalculado = await recalcularLineupComMotor(true);
   const tempoDecorridoMs = Date.now() - startTime;
 
   console.log(`[SyncAll] ========================================================`);

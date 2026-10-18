@@ -63,9 +63,43 @@ export interface PraticagemPautaResponse {
   };
 }
 
+/**
+ * Faz o parsing seguro de literais de string em arrays JavaScript sem executar eval()
+ */
+export function parseJsStringArray(content: string): string[] {
+  const items: string[] = [];
+  let inString = false;
+  let current = '';
+  let escape = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    if (!inString) {
+      if (char === "'") {
+        inString = true;
+        current = '';
+        escape = false;
+      }
+    } else {
+      if (escape) {
+        current += char;
+        escape = false;
+      } else if (char === '\\') {
+        escape = true;
+      } else if (char === "'") {
+        inString = false;
+        items.push(current);
+      } else {
+        current += char;
+      }
+    }
+  }
+  return items;
+}
+
 export class PraticagemService {
-  private user = process.env.SP_PILOTS_USER || 'docasssb';
-  private pass = process.env.SP_PILOTS_PASS || 'Docas#2019';
+  private user = process.env.SP_PILOTS_USER || '';
+  private pass = process.env.SP_PILOTS_PASS || '';
   private baseUrl = process.env.SP_PILOTS_URL || 'https://ssb.sppilots.com.br';
 
   /**
@@ -74,6 +108,10 @@ export class PraticagemService {
   public async sincronizarPraticagem(): Promise<{ totalManobras: number; sucesso: boolean }> {
     const sql = getDatabase();
     console.log('[Praticagem] Iniciando sincronização da Pauta de Praticagem (SP Pilots)...');
+
+    if (!this.user || !this.pass) {
+      throw new Error('Credenciais da Praticagem não configuradas no ambiente (SP_PILOTS_USER / SP_PILOTS_PASS).');
+    }
 
     try {
       // 1. Obter cookie de sessão inicial ASP
@@ -139,13 +177,12 @@ export class PraticagemService {
       const html = decoder.decode(buffer);
       const $ = cheerio.load(html);
 
-      // 4. Extrair metadados e características dos navios a partir de HINTS_ITEMS
+      // 4. Extrair metadados e características dos navios a partir de HINTS_ITEMS de forma segura
       const hintsMatch = html.match(/var\s+HINTS_ITEMS\s*=\s*\[([\s\S]*?)\];\s*var\s+myHint/);
       const vesselHints: Record<number, Record<string, string>> = {};
       if (hintsMatch) {
         try {
-          const rawHintsArrayStr = `[${hintsMatch[1]}]`;
-          const rawHints: string[] = eval(rawHintsArrayStr);
+          const rawHints: string[] = parseJsStringArray(hintsMatch[1]);
           rawHints.forEach((hHtml, idx) => {
             const $h = cheerio.load(hHtml);
             const name = $h('td[style*="font-size: 16px"]').contents().first().text().trim();
@@ -427,7 +464,7 @@ export class PraticagemService {
       // 9. Atualizar automaticamente a projeção real do Line-up via Motor de Cálculo
       try {
         const { recalcularLineupComMotor } = await import('./engine.js');
-        await recalcularLineupComMotor();
+        await recalcularLineupComMotor(true);
         console.log('[Praticagem] Motor de cálculo atualizado com sucesso após sincronização da Praticagem.');
       } catch (errEngine) {
         console.error('[Praticagem] Erro ao recalcular motor após sincronização da Praticagem:', errEngine);

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { getDatabase } from '../database/connection.js';
-import { recalcularLineupComMotor } from '../services/engine.js';
+import { recalcularLineupComMotor, invalidarCacheLineup, obterMetricasAcuraciaPrevisoes } from '../services/engine.js';
 import { consultarDataDocked } from '../services/datadocked.js';
 import { obterResumoClima, obterPrevisaoChuvaDetalhada } from '../services/weather.js';
 import { NavioLineup } from '../types/index.js';
@@ -38,7 +38,7 @@ export async function getHealthHandler(_req: Request, res: Response): Promise<vo
 
 export async function getLineupHandler(_req: Request, res: Response): Promise<void> {
   try {
-    const result = await recalcularLineupComMotor();
+    const result = await recalcularLineupComMotor(false);
     res.json({
       success: true,
       data: result.navios,
@@ -128,7 +128,8 @@ export async function createNavioHandler(req: Request, res: Response): Promise<v
       RETURNING id
     `;
 
-    const recalculado = await recalcularLineupComMotor();
+    invalidarCacheLineup();
+    const recalculado = await recalcularLineupComMotor(true);
 
     res.status(201).json({
       success: true,
@@ -241,7 +242,8 @@ export async function updateNavioHandler(req: Request, res: Response): Promise<v
       WHERE id = ${id}
     `;
 
-    const recalculado = await recalcularLineupComMotor();
+    invalidarCacheLineup();
+    const recalculado = await recalcularLineupComMotor(true);
     res.json({
       success: true,
       message: 'Escala atualizada com sucesso',
@@ -269,7 +271,8 @@ export async function deleteNavioHandler(req: Request, res: Response): Promise<v
       }
     });
 
-    const recalculado = await recalcularLineupComMotor();
+    invalidarCacheLineup();
+    const recalculado = await recalcularLineupComMotor(true);
     res.json({
       success: true,
       message: 'Escala excluída e fila reindexada',
@@ -298,7 +301,8 @@ export async function reordenarFilaHandler(req: Request, res: Response): Promise
       }
     });
 
-    const recalculado = await recalcularLineupComMotor();
+    invalidarCacheLineup();
+    const recalculado = await recalcularLineupComMotor(true);
     res.json({
       success: true,
       message: 'Prioridades reordenadas com sucesso',
@@ -381,7 +385,8 @@ export async function syncDataDockedHandler(req: Request, res: Response): Promis
     }
 
     // Recalcula o motor automaticamente para atualizar o line-up com o novo ETA ou calado
-    const recalculado = await recalcularLineupComMotor();
+    invalidarCacheLineup();
+    const recalculado = await recalcularLineupComMotor(true);
 
     res.json({
       success: true,
@@ -399,7 +404,7 @@ export async function syncDataDockedHandler(req: Request, res: Response): Promis
 
 export async function getResumoOperacionalHandler(_req: Request, res: Response): Promise<void> {
   try {
-    const result = await recalcularLineupComMotor();
+    const result = await recalcularLineupComMotor(false);
     res.json({
       success: true,
       data: result.operacional
@@ -548,6 +553,26 @@ export async function getRainForecastHandler(_req: Request, res: Response): Prom
     });
   } catch (err) {
     console.error('[LineupController] Erro ao obter previsão de chuva:', err);
+    res.status(500).json({ success: false, error: (err as Error).message });
+  }
+}
+
+export async function getHistoricoPrevisoesHandler(_req: Request, res: Response): Promise<void> {
+  try {
+    const sql = getDatabase();
+    const rows = await sql`
+      SELECT * FROM lineup_historico_previsoes
+      ORDER BY registrado_em DESC
+      LIMIT 100
+    `;
+    const metricas = await obterMetricasAcuraciaPrevisoes();
+    res.json({
+      success: true,
+      metricas,
+      historico: rows
+    });
+  } catch (err) {
+    console.error('[LineupController] Erro ao obter histórico de previsões:', err);
     res.status(500).json({ success: false, error: (err as Error).message });
   }
 }

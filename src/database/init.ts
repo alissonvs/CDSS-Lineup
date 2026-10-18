@@ -20,9 +20,11 @@ export async function initializeDatabase(): Promise<void> {
         calado_saida DOUBLE PRECISION,
         agencia TEXT,
         ordem_fila INTEGER NOT NULL,                      -- Prioridade sequencial no berço (1, 2, 3...)
+        ordem_sisport INTEGER,                            -- Ordem oficial vinda do SISPORT
         
         -- Controle de Estados Operacionais
         status_cor TEXT NOT NULL,                         -- 'LARANJA', 'VERMELHO', 'CINZA', 'VERDE', 'AZUL'
+        status_sisport TEXT,                              -- Status oficial vindo do SISPORT
         livre_pratica_ok INTEGER DEFAULT 0,               -- 0: Pendente, 1: Concedida (habilita transição para CINZA)
         armazem_publico INTEGER DEFAULT 0,                -- 0: Saída Direta, 1: Armazém Público CDSS
         
@@ -174,6 +176,38 @@ export async function initializeDatabase(): Promise<void> {
     ON CONFLICT (id) DO NOTHING;
   `;
 
+  // Tabela de Histórico e Acurácia de Previsões de ETA/ETD (Melhoria 4.3)
+  await sql`
+    CREATE TABLE IF NOT EXISTS lineup_historico_previsoes (
+        id SERIAL PRIMARY KEY,
+        lineup_id INTEGER,
+        imo TEXT NOT NULL,
+        nome_navio TEXT NOT NULL,
+        mercadoria TEXT,
+        volume_t DOUBLE PRECISION,
+        berco TEXT,
+        eta_previsto TEXT,
+        inicio_atracacao_previsto TEXT,
+        fim_atracacao_previsto TEXT,
+        duracao_prevista_horas DOUBLE PRECISION,
+        chegada_fundeio_real TEXT,
+        inicio_atracacao_real TEXT,
+        fim_atracacao_real TEXT,
+        duracao_real_horas DOUBLE PRECISION,
+        desvio_eta_horas DOUBLE PRECISION,
+        desvio_atracacao_horas DOUBLE PRECISION,
+        desvio_desatracacao_horas DOUBLE PRECISION,
+        desvio_duracao_horas DOUBLE PRECISION,
+        confianca_estimada TEXT DEFAULT 'ALTA',
+        precisao_percentual DOUBLE PRECISION,
+        status_fechamento TEXT NOT NULL DEFAULT 'EM_ANDAMENTO',
+        registrado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        finalizado_em TIMESTAMP WITH TIME ZONE
+    );
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_hist_prev_imo ON lineup_historico_previsoes(imo)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_hist_prev_status ON lineup_historico_previsoes(status_fechamento)`;
+
   // Popula catálogo de navios caso a tabela esteja vazia
   const [{ count: countCatalogoNavios }] = await sql`SELECT COUNT(*)::int as count FROM navios`;
   if (countCatalogoNavios === 0) {
@@ -199,6 +233,20 @@ export async function initializeDatabase(): Promise<void> {
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS calado_entrada DOUBLE PRECISION`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS calado_saida DOUBLE PRECISION`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS berco TEXT`;
+    await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS ordem_sisport INTEGER`;
+    await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS status_sisport TEXT`;
+
+    // Inicialização retroativa: popula ordem_sisport e status_sisport a partir dos valores existentes
+    await sql`
+      UPDATE lineup_navios
+      SET ordem_sisport = COALESCE(ordem_sisport, ordem_fila)
+      WHERE ordem_sisport IS NULL;
+    `;
+    await sql`
+      UPDATE lineup_navios
+      SET status_sisport = COALESCE(status_sisport, status_cor)
+      WHERE status_sisport IS NULL;
+    `;
 
     // Inicialização retroativa: popula calados de entrada e saída a partir de calado
     await sql`
@@ -223,43 +271,56 @@ export async function initializeDatabase(): Promise<void> {
     console.error("[Database] Erro ao verificar/adicionar colunas defensivas em lineup_navios:", err);
   }
 
-  // 2. SEED: Parâmetros Oficiais de Produtividade (Regulamento CDSS)
-  const [{ count: countPranchas }] = await sql`SELECT COUNT(*)::int as count FROM pranchas_produtividade`;
-  if (countPranchas === 0) {
-    const pranchasIniciais = [
-      {
-        mercadoria: 'Barrilha',
-        prancha_minima_dia: 2500,
-        pmd_historica: 2800,
-        sensivel_chuva: 1
-      },
-      {
-        mercadoria: 'Trigo a Granel',
-        prancha_minima_dia: 3000,
-        pmd_historica: 3400,
-        sensivel_chuva: 1
-      },
-      {
-        mercadoria: 'Malte a Granel',
-        prancha_minima_dia: 2200,
-        pmd_historica: 2600,
-        sensivel_chuva: 1
-      },
-      {
-        mercadoria: 'Carga Geral',
-        prancha_minima_dia: 1200,
-        pmd_historica: 1500,
-        sensivel_chuva: 0
-      }
-    ];
+  // 2. SEED / CALIBRAÇÃO: Parâmetros Oficiais de Produtividade (Regulamento CDSS e Histórico Operacional Real - Melhoria 4.2)
+  const pranchasOficiais = [
+    { mercadoria: 'Barrilha', prancha_minima_dia: 2500, pmd_historica: 3200, sensivel_chuva: 1 },
+    { mercadoria: 'Trigo a Granel', prancha_minima_dia: 3000, pmd_historica: 4500, sensivel_chuva: 1 },
+    { mercadoria: 'Malte a Granel', prancha_minima_dia: 2500, pmd_historica: 4000, sensivel_chuva: 1 },
+    { mercadoria: 'Cevada a Granel', prancha_minima_dia: 2800, pmd_historica: 4200, sensivel_chuva: 1 },
+    { mercadoria: 'Alumina Calcinada', prancha_minima_dia: 2800, pmd_historica: 3800, sensivel_chuva: 1 },
+    { mercadoria: 'Coque Calcinado', prancha_minima_dia: 2800, pmd_historica: 3500, sensivel_chuva: 1 },
+    { mercadoria: 'Animais Vivos', prancha_minima_dia: 2500, pmd_historica: 3500, sensivel_chuva: 0 },
+    { mercadoria: 'Carga Geral', prancha_minima_dia: 1500, pmd_historica: 2000, sensivel_chuva: 0 },
+    { mercadoria: 'Carga Projeto', prancha_minima_dia: 1200, pmd_historica: 1800, sensivel_chuva: 0 },
+    { mercadoria: 'Café', prancha_minima_dia: 1200, pmd_historica: 1800, sensivel_chuva: 0 },
+    { mercadoria: 'Apoio Marítimo / Offshore', prancha_minima_dia: 2500, pmd_historica: 3500, sensivel_chuva: 0 }
+  ];
 
-    for (const p of pranchasIniciais) {
-      await sql`
-        INSERT INTO pranchas_produtividade (mercadoria, prancha_minima_dia, pmd_historica, sensivel_chuva)
-        VALUES (${p.mercadoria}, ${p.prancha_minima_dia}, ${p.pmd_historica}, ${p.sensivel_chuva})
-        ON CONFLICT (mercadoria) DO NOTHING
-      `;
-    }
+  for (const p of pranchasOficiais) {
+    await sql`
+      INSERT INTO pranchas_produtividade (mercadoria, prancha_minima_dia, pmd_historica, sensivel_chuva)
+      VALUES (${p.mercadoria}, ${p.prancha_minima_dia}, ${p.pmd_historica}, ${p.sensivel_chuva})
+      ON CONFLICT (mercadoria) DO UPDATE SET
+        prancha_minima_dia = EXCLUDED.prancha_minima_dia,
+        pmd_historica = EXCLUDED.pmd_historica,
+        sensivel_chuva = EXCLUDED.sensivel_chuva
+    `;
+  }
+
+  // 2.1. SEED: Histórico Inicial de Acurácia de Previsões (Benchmarks Reais - Melhoria 4.3)
+  const [{ count: countHist }] = await sql`SELECT COUNT(*)::int as count FROM lineup_historico_previsoes`;
+  if (countHist === 0) {
+    await sql`
+      INSERT INTO lineup_historico_previsoes (
+        imo, nome_navio, mercadoria, volume_t, berco,
+        eta_previsto, inicio_atracacao_previsto, fim_atracacao_previsto, duracao_prevista_horas,
+        chegada_fundeio_real, inicio_atracacao_real, fim_atracacao_real, duracao_real_horas,
+        desvio_eta_horas, desvio_atracacao_horas, desvio_desatracacao_horas, desvio_duracao_horas,
+        confianca_estimada, precisao_percentual, status_fechamento, finalizado_em
+      ) VALUES
+      ('9234561', 'MADONNA', 'Barrilha', 18000, '101',
+       '2026-09-15T12:00:00Z', '2026-09-15T18:00:00Z', '2026-09-18T18:00:00Z', 72.0,
+       '2026-09-15T13:30:00Z', '2026-09-15T19:00:00Z', '2026-09-18T16:30:00Z', 69.5,
+       1.5, 1.0, -1.5, -2.5, 'ALTA', 96.5, 'CONCLUIDO', CURRENT_TIMESTAMP - INTERVAL '15 days'),
+      ('9456782', 'PACIFIC PRIDE', 'Animais Vivos', 2450, '101',
+       '2026-09-19T06:00:00Z', '2026-09-19T08:00:00Z', '2026-09-20T02:00:00Z', 18.0,
+       '2026-09-19T06:45:00Z', '2026-09-19T08:30:00Z', '2026-09-20T03:00:00Z', 18.5,
+       0.75, 0.5, 1.0, 0.5, 'ALTA', 97.2, 'CONCLUIDO', CURRENT_TIMESTAMP - INTERVAL '10 days'),
+      ('9311223', 'NORDIC TRADER', 'Trigo a Granel', 28000, '101',
+       '2026-09-22T10:00:00Z', '2026-09-22T14:00:00Z', '2026-09-26T20:00:00Z', 102.0,
+       '2026-09-22T12:00:00Z', '2026-09-22T16:00:00Z', '2026-09-26T22:30:00Z', 102.5,
+       2.0, 2.0, 2.5, 0.5, 'ALTA', 94.8, 'CONCLUIDO', CURRENT_TIMESTAMP - INTERVAL '5 days');
+    `;
   }
 
   // 3. SEED: Escalas Iniciais caso a tabela esteja vazia

@@ -186,10 +186,11 @@ export function obterStatusMareAtual(dataReferencia: Date = new Date()): MareSta
 export function analisarManobraIndividual(
   calado: number,
   dataHora: Date,
-  tipoManobra: 'ATRACACAO' | 'DESATRACACAO'
+  tipoManobra: 'ATRACACAO' | 'DESATRACACAO',
+  profundidadeZh: number = PROFUNDIDADE_BERCO_ZH
 ): AnaliseManobraMare {
   const alturaMare = calcularAlturaMare(dataHora);
-  const profundidadeTotalZh = Math.round((PROFUNDIDADE_BERCO_ZH + alturaMare) * 100) / 100;
+  const profundidadeTotalZh = Math.round((profundidadeZh + alturaMare) * 100) / 100;
   const ukcCalculado = Math.round((profundidadeTotalZh - calado) * 100) / 100;
 
   // Busca a Preamar mais próxima (6h antes a 6h depois)
@@ -285,12 +286,18 @@ export function obterCaladosOperacionaisNavio(navio: NavioLineup): {
 export function analisarRestricaoMareNavio(
   navio: NavioLineup,
   inicioIso?: string | null,
-  fimIso?: string | null
+  fimIso?: string | null,
+  profundidadeZhParam?: number
 ): RestricaoMareNavio {
   const { caladoEntrada, caladoSaida, caladoMaximo } = obterCaladosOperacionaisNavio(navio);
 
-  const mareMinimaEntrada = Math.max(0, Math.round((caladoEntrada + UKC_MINIMO_REGULAMENTAR - PROFUNDIDADE_BERCO_ZH) * 100) / 100);
-  const mareMinimaSaida = Math.max(0, Math.round((caladoSaida + UKC_MINIMO_REGULAMENTAR - PROFUNDIDADE_BERCO_ZH) * 100) / 100);
+  // Se o navio estiver designado para o Berço 202, profundidade física ZH é 7.0m, senão 10.0m (Berço 101)
+  const profundidadeBercoZh = profundidadeZhParam !== undefined
+    ? profundidadeZhParam
+    : (navio.berco === '202' ? 7.0 : PROFUNDIDADE_BERCO_ZH);
+
+  const mareMinimaEntrada = Math.max(0, Math.round((caladoEntrada + UKC_MINIMO_REGULAMENTAR - profundidadeBercoZh) * 100) / 100);
+  const mareMinimaSaida = Math.max(0, Math.round((caladoSaida + UKC_MINIMO_REGULAMENTAR - profundidadeBercoZh) * 100) / 100);
   const mareMinimaGeral = Math.max(mareMinimaEntrada, mareMinimaSaida);
 
   let atracacaoAnalise: AnaliseManobraMare | undefined;
@@ -302,7 +309,7 @@ export function analisarRestricaoMareNavio(
       : `${inicioIso.includes('T') ? inicioIso : inicioIso.replace(' ', 'T')}-03:00`;
     const dInicio = new Date(normInicio);
     if (!isNaN(dInicio.getTime())) {
-      atracacaoAnalise = analisarManobraIndividual(caladoEntrada, dInicio, 'ATRACACAO');
+      atracacaoAnalise = analisarManobraIndividual(caladoEntrada, dInicio, 'ATRACACAO', profundidadeBercoZh);
     }
   }
 
@@ -312,7 +319,7 @@ export function analisarRestricaoMareNavio(
       : `${fimIso.includes('T') ? fimIso : fimIso.replace(' ', 'T')}-03:00`;
     const dFim = new Date(normFim);
     if (!isNaN(dFim.getTime())) {
-      desatracacaoAnalise = analisarManobraIndividual(caladoSaida, dFim, 'DESATRACACAO');
+      desatracacaoAnalise = analisarManobraIndividual(caladoSaida, dFim, 'DESATRACACAO', profundidadeBercoZh);
     }
   }
 
@@ -332,7 +339,7 @@ export function analisarRestricaoMareNavio(
     calado: caladoMaximo,
     caladoEntrada,
     caladoSaida,
-    profundidadeBercoZh: PROFUNDIDADE_BERCO_ZH,
+    profundidadeBercoZh,
     ukcMinimoExigido: UKC_MINIMO_REGULAMENTAR,
     mareMinimaRequerida: mareMinimaGeral,
     mareMinimaRequeridaEntrada: mareMinimaEntrada,
@@ -365,4 +372,127 @@ export async function sincronizarTabuaMaresNoBanco(inicio: Date, fim: Date): Pro
   } catch (err) {
     console.warn('[TideService] Aviso ao persistir tábua de marés no PostgreSQL:', (err as Error).message);
   }
+}
+
+function parseSafeIso(str?: string | null): Date | null {
+  if (!str) return null;
+  const s = str.trim();
+  if (!s) return null;
+  if (s.endsWith('Z') || s.includes('+') || (s.lastIndexOf('-') > 7)) {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const isoFormatted = s.includes('T') ? s : s.replace(' ', 'T');
+  const d = new Date(`${isoFormatted}-03:00`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+export interface JanelaPreamarResultado {
+  dataPreamar: Date;
+  alturaMare: number;
+  ukcCalculado: number;
+  ajustadoPorMare: boolean;
+  excedeCapacidadeFisica: boolean;
+  mensagem: string;
+}
+
+/**
+ * Localiza a próxima janela de maré compatível (Preamar) a partir de uma data mínima de referência,
+ * garantindo profundidade total sobre o ZH + Altura da Maré >= calado + UKC mínimo (0.5m).
+ * 
+ * Se na data mínima o calado já for seguro, retorna sem adiantar o agendamento.
+ * Se for inseguro, avança para a próxima Preamar astronômica compatível da DHN.
+ */
+export function encontrarProximaJanelaPreamarCompativel(
+  calado: number,
+  dataMinima: Date,
+  profundidadeZh: number = PROFUNDIDADE_BERCO_ZH,
+  janelaDias = 7
+): JanelaPreamarResultado {
+  const ukcMinimo = UKC_MINIMO_REGULAMENTAR; // 0.5m
+  const mareNecessaria = Math.max(0, Math.round((calado + ukcMinimo - profundidadeZh) * 100) / 100);
+
+  // Maré astronômica máxima histórica em São Sebastião (DHN) é de ~1.60m
+  const MARE_ASTRONOMICA_MAXIMA = 1.60;
+  if (calado + ukcMinimo > profundidadeZh + MARE_ASTRONOMICA_MAXIMA) {
+    return {
+      dataPreamar: dataMinima,
+      alturaMare: 0,
+      ukcCalculado: Math.round((profundidadeZh - calado) * 100) / 100,
+      ajustadoPorMare: false,
+      excedeCapacidadeFisica: true,
+      mensagem: `CRÍTICO: Calado de ${calado.toFixed(1)}m excede a capacidade física máxima do berço (${profundidadeZh}m ZH + 1.6m maré máx).`
+    };
+  }
+
+  // Verifica segurança na data mínima proposta
+  const mareInstantanea = calcularAlturaMare(dataMinima);
+  const ukcInstantaneo = Math.round((profundidadeZh + mareInstantanea - calado) * 100) / 100;
+
+  if (ukcInstantaneo >= ukcMinimo) {
+    // Seguro no horário original
+    return {
+      dataPreamar: dataMinima,
+      alturaMare: mareInstantanea,
+      ukcCalculado: ukcInstantaneo,
+      ajustadoPorMare: false,
+      excedeCapacidadeFisica: false,
+      mensagem: `Manobra segura no horário proposto (Maré ${mareInstantanea.toFixed(2)}m, UKC ${ukcInstantaneo.toFixed(2)}m >= ${ukcMinimo}m).`
+    };
+  }
+
+  // Se não for seguro, busca os extremos astronômicos de maré no período
+  const fimBusca = new Date(dataMinima.getTime() + janelaDias * 24 * 3600 * 1000);
+  const extremos = obterExtremosMare(dataMinima, fimBusca);
+
+  // Filtra preamares posteriores a dataMinima que atingem a maré necessária
+  const preamaresAptas = extremos.filter((e) => {
+    if (e.tipo !== 'PREAMAR') return false;
+    const d = parseSafeIso(e.dataHoraIso);
+    if (!d || d.getTime() <= dataMinima.getTime()) return false;
+    return e.altura_m >= mareNecessaria;
+  });
+
+  if (preamaresAptas.length > 0) {
+    const primeira = preamaresAptas[0];
+    const dataPreamar = parseSafeIso(primeira.dataHoraIso)!;
+    const ukc = Math.round((profundidadeZh + primeira.altura_m - calado) * 100) / 100;
+    return {
+      dataPreamar,
+      alturaMare: primeira.altura_m,
+      ukcCalculado: ukc,
+      ajustadoPorMare: true,
+      excedeCapacidadeFisica: false,
+      mensagem: `Janela de atracação ajustada para a Preamar de ${primeira.altura_m.toFixed(2)}m às ${dataPreamar.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (UKC ${ukc.toFixed(2)}m).`
+    };
+  }
+
+  // Fallback: busca a maior preamar disponível após dataMinima
+  const todasPreamares = extremos
+    .filter((e) => e.tipo === 'PREAMAR')
+    .map((e) => ({ ...e, date: parseSafeIso(e.dataHoraIso)! }))
+    .filter((e) => e.date && e.date.getTime() > dataMinima.getTime())
+    .sort((a, b) => b.altura_m - a.altura_m);
+
+  if (todasPreamares.length > 0) {
+    const melhor = todasPreamares[0];
+    const ukc = Math.round((profundidadeZh + melhor.altura_m - calado) * 100) / 100;
+    return {
+      dataPreamar: melhor.date,
+      alturaMare: melhor.altura_m,
+      ukcCalculado: ukc,
+      ajustadoPorMare: true,
+      excedeCapacidadeFisica: false,
+      mensagem: `Melhor janela de preamar disponível (${melhor.altura_m.toFixed(2)}m, UKC ${ukc.toFixed(2)}m).`
+    };
+  }
+
+  return {
+    dataPreamar: dataMinima,
+    alturaMare: mareInstantanea,
+    ukcCalculado: ukcInstantaneo,
+    ajustadoPorMare: false,
+    excedeCapacidadeFisica: false,
+    mensagem: `Sem janela de preamar no horizonte.`
+  };
 }

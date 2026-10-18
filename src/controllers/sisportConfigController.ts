@@ -64,7 +64,7 @@ export async function triggerSisportSyncHandler(_req: Request, res: Response): P
       return;
     }
 
-    const recalculado = await recalcularLineupComMotor();
+    const recalculado = await recalcularLineupComMotor(true);
 
     res.json({
       success: true,

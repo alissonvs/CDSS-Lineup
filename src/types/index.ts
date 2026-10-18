@@ -22,6 +22,8 @@ export interface TimelineBlock {
   fimIso: string;
   duracaoHoras: number;
   caladoCritico?: boolean;
+  confianca?: 'CONFIRMADA' | 'ESTIMADA' | 'SOLICITADA';
+  categoriaPraticagem?: string;
 }
 
 export interface NavioLineup {
@@ -38,7 +40,9 @@ export interface NavioLineup {
   calado_saida?: number; // Calado na desatracação (m)
   agencia?: string;
   ordem_fila: number;
+  ordem_sisport?: number | null; // Sequência oficial base vinda do SISPORT
   status_cor: StatusCor;
+  status_sisport?: StatusCor | null; // Status oficial base vindo do SISPORT
   livre_pratica_ok: number; // 0 ou 1
   armazem_publico: number; // 0 ou 1
   eta_previsto?: string; // Previsão Oficial de Chegada (SISPORT)
@@ -51,6 +55,7 @@ export interface NavioLineup {
   longitude: number;
   sinal_antena?: string | null;
   ais_sincronizado_em?: string | null;
+  sog?: number | null; // Velocidade sobre o fundo (Speed Over Ground) em nós
   progresso_operacao?: number | null; // % de progresso da operação no berço (SISPORT)
   ultima_atualizacao?: string;
 
@@ -66,10 +71,15 @@ export interface NavioLineup {
   origem_previsao_fim?: 'CALCULADO' | 'PRATICAGEM' | 'MANUAL';
   manobra_praticagem_id?: number | null;
   manobra_praticagem_str?: string | null;
+  confianca_manobra?: 'CONFIRMADA' | 'ESTIMADA' | 'SOLICITADA';
+  categoria_manobra?: string;
   ajuste_praticagem_ativo?: number;
+  janela_preamar_info?: string | null;
   volume_restante_t?: number;
   taxa_efetiva_t_hora?: number;
   tempo_restante_horas?: number;
+  confianca_previsao?: 'ALTA' | 'MEDIA' | 'BAIXA';
+  precisao_estimada?: number;
 }
 
 
@@ -146,6 +156,42 @@ export interface ResumoOperacional {
   navios_fundeados: number;
   horas_ocupadas: number;
   volume_total_t: number;
+  metricas_acuracia?: MetricasAcuraciaPrevisao;
+}
+
+export interface SnapshotHistoricoPrevisao {
+  id?: number;
+  lineup_id?: number;
+  imo: string;
+  nome_navio: string;
+  mercadoria?: string;
+  volume_t?: number;
+  berco?: string;
+  eta_previsto?: string | null;
+  inicio_atracacao_previsto?: string | null;
+  fim_atracacao_previsto?: string | null;
+  duracao_prevista_horas?: number | null;
+  chegada_fundeio_real?: string | null;
+  inicio_atracacao_real?: string | null;
+  fim_atracacao_real?: string | null;
+  duracao_real_horas?: number | null;
+  desvio_eta_horas?: number | null;
+  desvio_atracacao_horas?: number | null;
+  desvio_desatracacao_horas?: number | null;
+  desvio_duracao_horas?: number | null;
+  confianca_estimada?: 'ALTA' | 'MEDIA' | 'BAIXA';
+  precisao_percentual?: number | null;
+  status_fechamento?: 'EM_ANDAMENTO' | 'CONCLUIDO';
+  registrado_em?: string;
+  finalizado_em?: string | null;
+}
+
+export interface MetricasAcuraciaPrevisao {
+  mae_atracacao_horas: number;
+  mae_desatracacao_horas: number;
+  taxa_acuracia_geral: number;
+  total_escalas_avaliadas: number;
+  confianca_modelo: 'ALTA' | 'MEDIA' | 'BAIXA';
 }
 
 export interface PranchaProdutividade {

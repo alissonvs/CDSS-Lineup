@@ -14,7 +14,8 @@ import {
   searchNavioCatalogoHandler,
   getMaresHandler,
   getCurrentTideHandler,
-  getRainForecastHandler
+  getRainForecastHandler,
+  getHistoricoPrevisoesHandler
 } from '../controllers/lineupController.js';
 import {
   getSisportConfigHandler,
@@ -37,6 +38,7 @@ router.get('/version', (_req, res) => { res.json({ name: 'pcs-lineup', version: 
 
 // Lineup e Navios
 router.get('/lineup', getLineupHandler);
+router.get('/lineup/historico-previsoes', getHistoricoPrevisoesHandler);
 router.post('/navios', createNavioHandler);
 router.put('/navios/:id', updateNavioHandler);
 router.delete('/navios/:id', deleteNavioHandler);

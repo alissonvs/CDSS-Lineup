@@ -11,9 +11,12 @@ import {
   Anchor,
   Package,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Target,
+  Eye,
+  LayoutGrid
 } from 'lucide-react';
-import { verificarDivergenciaEta, formatarDataBr } from '../utils/etaValidation';
+import { verificarDivergenciaEta, formatarDataBr, formatarDataHoraCurta } from '../utils/etaValidation';
 import { TideWaveTrack } from './TideWaveTrack';
 import type { ExtremoMare } from '../utils/tideWaveRenderer';
 import { useTheme } from '../context/ThemeContext';
@@ -69,6 +72,24 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   const [hoveredNavio, setHoveredNavio] = useState<NavioLineup | null>(null);
   const [hoveredMarco, setHoveredMarco] = useState<HoveredMarcoInfo | null>(null);
   const [hoveredBloco, setHoveredBloco] = useState<HoveredBlocoInfo | null>(null);
+
+  // Modo de Exibição das Informações na Coluna Y (Essencial vs Detalhado)
+  const [modoExibicao, setModoExibicao] = useState<'ESSENCIAL' | 'DETALHADO'>(() => {
+    try {
+      return (localStorage.getItem('cdss_gantt_modo_exibicao') as 'ESSENCIAL' | 'DETALHADO') || 'ESSENCIAL';
+    } catch {
+      return 'ESSENCIAL';
+    }
+  });
+
+  const handleToggleModoExibicao = (novoModo: 'ESSENCIAL' | 'DETALHADO') => {
+    setModoExibicao(novoModo);
+    try {
+      localStorage.setItem('cdss_gantt_modo_exibicao', novoModo);
+    } catch {
+      // Ignora erro de quota em localStorage se houver
+    }
+  };
 
   // Escala Temporal Selecionada (7D / 14D / 28D) controlada pelo CCO Header
   const currentScale = scaleDays ?? 7;
@@ -285,7 +306,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 blockStyle = 'bg-red-700 border-y border-red-500 text-white shadow-md font-bold';
                 roundedClass = 'rounded-none';
               } else {
-                blockStyle = 'bg-emerald-600 border border-emerald-400 text-white shadow-md font-bold';
+                const isSolicitada = bloco.categoriaPraticagem === 'SOLICITADAS' || bloco.confianca === 'SOLICITADA';
+                blockStyle = isSolicitada
+                  ? 'bg-emerald-600/85 border-2 border-dashed border-emerald-300 text-white shadow-md font-bold'
+                  : 'bg-emerald-600 border border-emerald-400 text-white shadow-md font-bold';
                 roundedClass = overflowsRight ? 'rounded-none' : 'rounded-r-lg';
               }
 
@@ -297,7 +321,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 <div
                   key={`block-${navio.id}-${bIdx}`}
                   onClick={onSelectNavio ? () => onSelectNavio(navio) : undefined}
-                  title={`${bloco.label} (${bloco.duracaoHoras}h)`}
+                  title={`${bloco.label} (${bloco.duracaoHoras}h)${bloco.categoriaPraticagem ? ` [${bloco.categoriaPraticagem} - Confiança ${bloco.confianca || 'MÉDIA'}]` : ''}`}
                   onMouseEnter={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
                     setHoveredBloco({
@@ -383,18 +407,43 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     );
   };
 
-  // Métricas desacopladas da Taxa de Ocupação Mensal vs Backlog Total da Carteira
+  // Métricas da Taxa de Ocupação da Janela Visível vs Backlog Total da Carteira
   const totalHorasBacklog = operacional?.horas_ocupadas ?? navios.reduce((acc, n) => acc + (n.duracao_estimada_horas || 0), 0);
-  const horasJanelaMes = 720; // 30 dias nominais x 24 horas
   const totalNaviosProgramados = operacional?.total_navios ?? navios.length;
 
-  // Taxa de ocupação estritamente restrita à capacidade nominal da janela de 30 dias (720h)
-  const ocupacaoJanela30d = Math.min(
+  // Capacidade nominal da escala visível selecionada (7D / 14D / 28D) em horas
+  const horasJanelaVisivel = currentScale * 24;
+
+  // Horas efetivamente ocupadas pelos navios na janela temporal visível [timelineStart, timelineEnd]
+  const horasOcupadasJanela = useMemo(() => {
+    const tStartMs = timelineStart.getTime();
+    const tEndMs = timelineEnd.getTime();
+    let totalMs = 0;
+
+    for (const n of navios) {
+      if (n.berco && n.berco !== '101') continue; // Foco na capacidade do cais comercial principal
+      if (!n.inicio_atracacao || !n.fim_atracacao) continue;
+      const ini = new Date(n.inicio_atracacao).getTime();
+      const fim = new Date(n.fim_atracacao).getTime();
+      if (isNaN(ini) || isNaN(fim)) continue;
+
+      const overlapStart = Math.max(tStartMs, ini);
+      const overlapEnd = Math.min(tEndMs, fim);
+      if (overlapEnd > overlapStart) {
+        totalMs += (overlapEnd - overlapStart);
+      }
+    }
+    return Math.round((totalMs / 3600000) * 10) / 10;
+  }, [navios, timelineStart, timelineEnd]);
+
+  // Taxa de ocupação estritamente restrita à capacidade nominal da janela visível (7D / 14D / 28D)
+  const ocupacaoJanelaVisivel = Math.min(
     100,
-    Math.round((Math.min(totalHorasBacklog, horasJanelaMes) / horasJanelaMes) * 100)
+    Math.round((horasOcupadasJanela / horasJanelaVisivel) * 100)
   );
 
-  // Demanda acumulada de toda a carteira da fila em relação à capacidade mensal de 720h
+  // Demanda acumulada de toda a carteira da fila em relação à capacidade mensal de 720h (referência de saturação)
+  const horasJanelaMes = 720;
   const demandaPercentualStr = ((totalHorasBacklog / horasJanelaMes) * 100).toLocaleString('pt-BR', {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1
@@ -407,7 +456,25 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     maximumFractionDigits: 1
   });
 
-  const tooltipAuditoria = `Janela Mensal: ${horasJanelaMes}h saturada (${ocupacaoJanela30d}%) | Backlog em Carteira: ${totalHorasBacklogStr}h com ${totalNaviosProgramados} navios programados`;
+  // Data de término projetada para a conclusão de toda a carteira de navios
+  const dataTerminoFilaStr = useMemo(() => {
+    let maxFimMs = 0;
+    for (const n of navios) {
+      if (n.fim_atracacao) {
+        const t = new Date(n.fim_atracacao).getTime();
+        if (!isNaN(t) && t > maxFimMs) maxFimMs = t;
+      }
+    }
+    if (maxFimMs === 0) return '—';
+    const d = new Date(maxFimMs);
+    return d.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  }, [navios]);
+
+  const tooltipAuditoria = `Janela ${currentScale}D: ${horasOcupadasJanela.toLocaleString('pt-BR')}h de ${horasJanelaVisivel}h ocupadas (${ocupacaoJanelaVisivel}%) • Carteira Total: ${totalHorasBacklogStr}h (${demandaPercentualStr}% de demanda) em ${totalNaviosProgramados} navios com término estimado em ${dataTerminoFilaStr} (~${diasCaisEstimados} dias)`;
 
   return (
     <div
@@ -489,10 +556,49 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 
         {/* 2. Cabeçalho do Eixo X: Régua de Dias do Mês */}
         <div className="sticky top-[24px] z-30 bg-slate-100 dark:bg-[#070d18] border-b border-slate-200 dark:border-cco-border flex h-11 shrink-0 shadow-sm">
-          {/* Coluna fixa do Y-axis header */}
-          <div className="w-[26.5rem] min-w-[26.5rem] px-4 py-2 bg-slate-100 dark:bg-[#070d18] border-r border-slate-200 dark:border-cco-border flex items-center justify-between font-bold text-xs text-slate-700 dark:text-slate-300 tracking-wider uppercase shrink-0">
-            <span>Fila | Embarcação</span>
-            <span>Carga / Volume</span>
+          {/* Coluna fixa do Y-axis header com seletor de densidade */}
+          <div className="w-[26.5rem] min-w-[26.5rem] px-3.5 py-1.5 bg-slate-100 dark:bg-[#070d18] border-r border-slate-200 dark:border-cco-border flex items-center justify-between font-bold text-xs text-slate-700 dark:text-slate-300 tracking-wider uppercase shrink-0">
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] font-extrabold text-slate-800 dark:text-slate-200 whitespace-nowrap">Fila • Navio</span>
+              {/* Seletor de Densidade: Essencial vs Detalhado */}
+              <div className="flex items-center bg-slate-200/90 dark:bg-slate-800/90 p-0.5 rounded border border-slate-300 dark:border-slate-700/80 text-[10px] font-semibold normal-case tracking-normal shadow-inner relative z-30">
+                <button
+                  type="button"
+                  id="btn-modo-essencial"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleModoExibicao('ESSENCIAL');
+                  }}
+                  className={`px-2 py-0.5 rounded transition-all flex items-center space-x-1 cursor-pointer ${
+                    modoExibicao === 'ESSENCIAL'
+                      ? 'bg-blue-600 text-white font-bold shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-300/50 dark:hover:bg-slate-700/50'
+                  }`}
+                  title="Modo Essencial: Exibe dados operacionais prioritários sem poluição visual"
+                >
+                  <Eye className="w-3 h-3" />
+                  <span>Essencial</span>
+                </button>
+                <button
+                  type="button"
+                  id="btn-modo-detalhado"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleModoExibicao('DETALHADO');
+                  }}
+                  className={`px-2 py-0.5 rounded transition-all flex items-center space-x-1 cursor-pointer ${
+                    modoExibicao === 'DETALHADO'
+                      ? 'bg-blue-600 text-white font-bold shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-300/50 dark:hover:bg-slate-700/50'
+                  }`}
+                  title="Modo Detalhado: Exibe especificações náuticas completas (LOA, Calados E/S, IMO)"
+                >
+                  <LayoutGrid className="w-3 h-3" />
+                  <span>Detalhado</span>
+                </button>
+              </div>
+            </div>
+            <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Carga / Volume</span>
           </div>
 
           {/* Escala dos dias do Eixo X */}
@@ -592,23 +698,86 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           </div>
         </div>
 
-        {/* 4. Trilhos Consolidados de Ocupação dos Berços (Berço 101 e Berço 202) */}
+        {/* 4. Trilhos Consolidados de Ocupação dos Berços (Berços 101 a 204 Dinâmicos) */}
         {(() => {
-          const renderBercoTrack = (bercoId: '101' | '202') => {
+          interface BercoDef {
+            id: string;
+            nome: string;
+            subtitulo: string;
+            badge: string;
+            badgeColor: string;
+            borderColor: string;
+            iconColor: string;
+            defaultVisible: boolean;
+          }
+
+          const BERCOS_CADASTRO: BercoDef[] = [
+            {
+              id: '101',
+              nome: 'BERÇO 101',
+              subtitulo: 'Cais Comercial • Fila Contínua',
+              badge: 'Fila Contínua',
+              badgeColor: 'bg-emerald-600 text-white',
+              borderColor: 'border-emerald-300 dark:border-emerald-500/40',
+              iconColor: 'text-emerald-500 dark:text-emerald-400',
+              defaultVisible: true,
+            },
+            {
+              id: '201',
+              nome: 'BERÇO 201',
+              subtitulo: 'Cais Comercial Norte',
+              badge: 'Cais Norte',
+              badgeColor: 'bg-teal-600 text-white',
+              borderColor: 'border-teal-300 dark:border-teal-500/40',
+              iconColor: 'text-teal-500 dark:text-teal-400',
+              defaultVisible: false,
+            },
+            {
+              id: '202',
+              nome: 'BERÇO 202',
+              subtitulo: 'Cais Interno • Apoio / Simultâneo',
+              badge: 'Cais Interno',
+              badgeColor: 'bg-cyan-600 text-white',
+              borderColor: 'border-cyan-300 dark:border-cyan-500/40',
+              iconColor: 'text-cyan-500 dark:text-cyan-400',
+              defaultVisible: true,
+            },
+            {
+              id: '203',
+              nome: 'BERÇO 203',
+              subtitulo: 'Cais Interno • Apoio Operacional',
+              badge: 'Cais Interno',
+              badgeColor: 'bg-sky-600 text-white',
+              borderColor: 'border-sky-300 dark:border-sky-500/40',
+              iconColor: 'text-sky-500 dark:text-sky-400',
+              defaultVisible: false,
+            },
+            {
+              id: '204',
+              nome: 'BERÇO 204',
+              subtitulo: 'Cais Sul Interno • Apoio Offshore',
+              badge: 'Cais Sul',
+              badgeColor: 'bg-blue-600 text-white',
+              borderColor: 'border-blue-300 dark:border-blue-500/40',
+              iconColor: 'text-blue-500 dark:text-blue-400',
+              defaultVisible: false,
+            },
+          ];
+
+          const activeBercos = BERCOS_CADASTRO.filter((b) => {
+            if (b.defaultVisible) return true;
+            return navios.some((n) => n.berco === b.id);
+          });
+
+          const renderBercoTrack = (bercoDef: BercoDef) => {
             const bercoNavios = navios.filter((n) => {
-              if (bercoId === '101') {
+              if (bercoDef.id === '101') {
                 if (n.status_cor === 'VERDE') {
-                  // Berço 101: navios com berço 101 (ou default se não especificado)
                   return n.berco === '101' || !n.berco;
                 }
-                // Toda a sequência cronológica da fila de espera comercial atracará no Cais Comercial (Berço 101)
                 return n.berco === '101' || !n.berco;
               } else {
-                if (n.status_cor === 'VERDE') {
-                  // Berço 202 (Cais Interno): operação no cais interno / apoio
-                  return n.berco === '202';
-                }
-                return n.berco === '202';
+                return n.berco === bercoDef.id;
               }
             });
 
@@ -618,7 +787,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 return berthBlocks.map((b, bIdx) => ({
                   navio: n,
                   bloco: b,
-                  key: `berco-${bercoId}-track-${n.id}-${bIdx}`
+                  key: `berco-${bercoDef.id}-track-${n.id}-${bIdx}`
                 }));
               }
               return [{
@@ -630,7 +799,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   fimIso: n.fim_atracacao || '',
                   duracaoHoras: n.duracao_estimada_horas || 0
                 },
-                key: `berco-${bercoId}-track-${n.id}-0`
+                key: `berco-${bercoDef.id}-track-${n.id}-0`
               }];
             }).filter((item) => {
               const s = parseDateToMs(item.bloco.inicioIso);
@@ -687,7 +856,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 <div
                   key={key}
                   onClick={onSelectNavio ? () => onSelectNavio(n) : undefined}
-                  title={`${isOp ? 'Operando no Berço' : 'Previsão de Berço'} (${bercoId === '101' ? 'Berço 101' : 'Berço 202'}): ${n.nome_navio} (${b.duracaoHoras}h)`}
+                  title={`${isOp ? 'Operando no Berço' : 'Previsão de Berço'} (${bercoDef.nome}): ${n.nome_navio} (${b.duracaoHoras}h)`}
                   className={`absolute flex items-center justify-center px-1.5 font-bold ${
                     onSelectNavio ? 'cursor-pointer hover:brightness-125' : 'cursor-default'
                   } z-20 overflow-hidden ${bgClass} ${roundedMasterClass} ${topStyle}`}
@@ -719,99 +888,62 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   <span>OCUPAÇÃO DOS BERÇOS &bull; PORTO DE SÃO SEBASTIÃO (BERÇOS 101 - 204)</span>
                 </span>
                 <span className="text-slate-500 dark:text-slate-400 text-[8.5px] font-medium hidden sm:inline">
-                  Berço 101: Cais Comercial (Sequência Oficial da Fila) &bull; Berço 202: Cais Interno (Apoio / Cabotagem)
+                  Berço 101: Cais Comercial &bull; Berço 202: Cais Interno (Apoio / Cabotagem) &bull; Berços 201/203/204: Dinâmicos
                 </span>
               </div>
 
-              {/* TRILHO 1: BERÇO 101 (Cais Comercial - Sequência do Line-up) */}
-              <div className="flex h-10 items-center shrink-0">
-                <div className="w-[26.5rem] min-w-[26.5rem] px-4 py-1.5 bg-white dark:bg-[#070d18] border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-30 h-full">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-emerald-500 dark:text-emerald-400 font-extrabold text-sm">⚓</span>
-                    <div>
-                      <div className="font-extrabold text-xs text-slate-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
-                        <span className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.2 rounded font-black tracking-wide">
-                          BERÇO 101
-                        </span>
-                        <span className="text-[10px] text-slate-700 dark:text-slate-300 font-bold">Cais Comercial</span>
-                      </div>
-                      <div className="text-[9px] text-emerald-600 dark:text-emerald-400 font-mono font-medium">
-                        Sequência Oficial &bull; Fila Contínua
-                      </div>
-                    </div>
-                  </div>
-                  <span className="text-[9px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 font-mono font-bold px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-500/40">
-                    Fila Contínua
-                  </span>
-                </div>
-
-                <div className="flex-1 relative flex items-center h-full bg-white dark:bg-[#070d18]">
-                  <div className="absolute inset-0 flex pointer-events-none">
-                    {daysList.map((day, idx) => (
-                      <div
-                        key={idx}
-                        className={`flex-1 border-r ${
-                          day.isWeekend ? 'bg-slate-100 dark:bg-slate-900/40 border-slate-200 dark:border-cco-border/30' : 'border-slate-100 dark:border-cco-border/15'
-                        }`}
-                      ></div>
-                    ))}
-                  </div>
-
-                  {isAgoraVisible && (
-                    <div
-                      className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] -translate-x-1/2"
-                      style={{ left: `${agoraPercent}%` }}
-                    ></div>
-                  )}
-
-                  {renderBercoTrack('101')}
-                </div>
-              </div>
-
-              {/* TRILHO 2: BERÇO 202 (Cais Interno - Operações Simultâneas / Apoio) */}
-              <div className="flex h-10 items-center shrink-0">
-                <div className="w-[26.5rem] min-w-[26.5rem] px-4 py-1.5 bg-white dark:bg-[#070d18] border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-30 h-full">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-cyan-500 dark:text-cyan-400 font-extrabold text-sm">⚓</span>
-                    <div>
-                      <div className="font-extrabold text-xs text-slate-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
-                        <span className="bg-cyan-600 text-white text-[9px] px-1.5 py-0.2 rounded font-black tracking-wide">
-                          BERÇO 202
-                        </span>
-                        <span className="text-[10px] text-slate-700 dark:text-slate-300 font-bold">Cais Interno</span>
-                      </div>
-                      <div className="text-[9px] text-cyan-600 dark:text-cyan-400 font-mono font-medium">
-                        Operações Simultâneas / Apoio
+              {/* TRILHOS ATIVOS DE BERÇOS */}
+              {activeBercos.map((bercoDef) => (
+                <div key={`berco-track-row-${bercoDef.id}`} className="flex h-10 items-center shrink-0">
+                  <div className="w-[26.5rem] min-w-[26.5rem] px-4 py-1.5 bg-white dark:bg-[#070d18] border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-30 h-full">
+                    <div className="flex items-center space-x-2">
+                      <span className={`${bercoDef.iconColor} font-extrabold text-sm`}>⚓</span>
+                      <div>
+                        <div className="font-extrabold text-xs text-slate-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+                          <span className={`${bercoDef.badgeColor} text-[9px] px-1.5 py-0.2 rounded font-black tracking-wide`}>
+                            {bercoDef.nome}
+                          </span>
+                          <span className="text-[10px] text-slate-700 dark:text-slate-300 font-bold">
+                            {bercoDef.id === '101' ? 'Cais Comercial' : bercoDef.id === '202' ? 'Cais Interno' : bercoDef.badge}
+                          </span>
+                        </div>
+                        <div className={`text-[9px] ${bercoDef.iconColor} font-mono font-medium truncate max-w-[200px]`}>
+                          {bercoDef.subtitulo}
+                        </div>
                       </div>
                     </div>
+                    <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${bercoDef.borderColor} ${
+                      bercoDef.id === '101'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
+                        : 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/80 dark:text-cyan-300'
+                    }`}>
+                      {bercoDef.badge}
+                    </span>
                   </div>
-                  <span className="text-[9px] bg-cyan-50 text-cyan-700 dark:bg-cyan-950/80 dark:text-cyan-300 font-mono font-bold px-1.5 py-0.5 rounded border border-cyan-300 dark:border-cyan-500/40">
-                    Cais Interno
-                  </span>
-                </div>
 
-                <div className="flex-1 relative flex items-center h-full bg-white dark:bg-[#070d18]">
-                  <div className="absolute inset-0 flex pointer-events-none">
-                    {daysList.map((day, idx) => (
+                  <div className="flex-1 relative flex items-center h-full bg-white dark:bg-[#070d18]">
+                    <div className="absolute inset-0 flex pointer-events-none">
+                      {daysList.map((day, idx) => (
+                        <div
+                          key={idx}
+                          className={`flex-1 border-r ${
+                            day.isWeekend ? 'bg-slate-100 dark:bg-slate-900/40 border-slate-200 dark:border-cco-border/30' : 'border-slate-100 dark:border-cco-border/15'
+                          }`}
+                        ></div>
+                      ))}
+                    </div>
+
+                    {isAgoraVisible && (
                       <div
-                        key={idx}
-                        className={`flex-1 border-r ${
-                          day.isWeekend ? 'bg-slate-100 dark:bg-slate-900/40 border-slate-200 dark:border-cco-border/30' : 'border-slate-100 dark:border-cco-border/15'
-                        }`}
+                        className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] -translate-x-1/2"
+                        style={{ left: `${agoraPercent}%` }}
                       ></div>
-                    ))}
+                    )}
+
+                    {renderBercoTrack(bercoDef)}
                   </div>
-
-                  {isAgoraVisible && (
-                    <div
-                      className="absolute top-0 bottom-0 z-20 pointer-events-none w-0.5 bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] -translate-x-1/2"
-                      style={{ left: `${agoraPercent}%` }}
-                    ></div>
-                  )}
-
-                  {renderBercoTrack('202')}
                 </div>
-              </div>
+              ))}
             </div>
           );
         })()}
@@ -862,7 +994,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           {/* Raias Individuais por Embarcação */}
           {navios.map((navio, navioIdx) => {
             const isOperating = navio.status_cor === 'VERDE';
-            const divergencia = verificarDivergenciaEta(navio.eta_previsto, navio.eta_ais);
+            const divergencia = !isOperating ? verificarDivergenciaEta(navio.eta_previsto, navio.eta_ais) : null;
             // Identifica se a linha está na porção inferior da lista para ancorar o popover para cima (bottom-0)
             const isNearBottom = navioIdx >= Math.max(2, navios.length - 4);
 
@@ -876,187 +1008,401 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   onMouseEnter={() => setHoveredNavio(navio)}
                   onMouseLeave={() => setHoveredNavio(null)}
                   onClick={() => onSelectNavio?.(navio)}
-                  className="w-[26.5rem] min-w-[26.5rem] px-4 py-2 bg-white/95 dark:bg-cco-panel/95 border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-20 group-hover:bg-slate-50 dark:group-hover:bg-cco-panel transition-colors relative cursor-pointer"
+                  className="w-[26.5rem] min-w-[26.5rem] px-3.5 py-2 bg-white/95 dark:bg-cco-panel/95 border-r border-slate-200 dark:border-cco-border flex items-center justify-between shrink-0 z-20 group-hover:bg-slate-50 dark:group-hover:bg-cco-panel transition-colors relative cursor-pointer"
                 >
-                  <div className="flex items-center space-x-3 overflow-hidden flex-1 min-w-0">
-                    {/* Badge da ordem na fila */}
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
-                        isOperating
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400'
-                          : 'bg-slate-800 text-slate-300 border border-slate-700'
-                      }`}
-                    >
-                      {navio.ordem_fila.toString().padStart(2, '0')}
-                    </div>
-
-                    {/* Dados Centrais do Navio estruturados fielmente ao esboço */}
-                    <div className="flex-1 min-w-0 flex flex-col justify-center space-y-0.5 overflow-hidden">
-                      {/* Top subheader: 1º NAVIO • OPERANDO ou 2º NAVIO • Na fila */}
-                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
-                        <span className="text-slate-500 dark:text-slate-400">
-                          {navio.ordem_fila}º NAVIO
-                        </span>
-                        {isOperating ? (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-extrabold flex items-center space-x-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span>• OPERANDO</span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 dark:text-slate-500 font-medium">
-                            Na fila
-                          </span>
-                        )}
+                  {modoExibicao === 'ESSENCIAL' ? (
+                    <>
+                      {/* Badge da ordem na fila */}
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                          isOperating
+                            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400'
+                            : 'bg-slate-800 text-slate-300 border border-slate-700'
+                        }`}
+                      >
+                        {navio.ordem_fila.toString().padStart(2, '0')}
                       </div>
 
-                      {/* Linha 1: Nome do Navio + Badge Berço + Badge No Berço + Progresso % */}
-                      <div className="flex items-center space-x-1.5 min-w-0">
-                        <span
-                          className="font-extrabold text-sm text-slate-900 dark:text-slate-100 transition-colors truncate"
-                          title={navio.nome_navio}
-                        >
-                          {navio.nome_navio}
-                        </span>
-                        {/* Badge de Designação de Berço (Berço 101 ou Berço 202) */}
-                        {(() => {
-                          const bercoEfetivo = navio.berco || '101';
-                          const is101 = bercoEfetivo === '101';
-                          return (
-                            <span
-                              className={`text-[9px] px-1.5 py-0.2 rounded font-black tracking-wider border shrink-0 ${
-                                is101
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-500/40'
-                                  : 'bg-cyan-50 text-cyan-700 border-cyan-300 dark:bg-cyan-950/80 dark:text-cyan-300 dark:border-cyan-500/40'
-                              }`}
-                              title={`Designação Oficial: Berço ${bercoEfetivo} (${is101 ? 'Cais Comercial' : 'Cais Interno'})`}
-                            >
-                              B-{bercoEfetivo}
-                            </span>
-                          );
-                        })()}
-                        {isOperating && (
-                          <div className="flex items-center space-x-1 shrink-0">
-                            <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 text-[9px] px-1.5 py-0.2 rounded font-bold border border-emerald-200 dark:border-emerald-500/40">
-                              NO BERÇO
-                            </span>
-                            {navio.progresso_operacao !== undefined && navio.progresso_operacao !== null && (
+                      {/* MODO ESSENCIAL: 2 linhas arejadas sem sobrecarga ou truncamento prematuro */}
+                      <div className="flex-1 min-w-0 h-full flex flex-col justify-between py-1 ml-2.5 overflow-hidden">
+                        {/* Linha 1: Nome completo + Berço + Status • Carga e Volume */}
+                        <div className="flex items-center justify-between gap-1.5 min-w-0">
+                          {/* Lado Esquerdo: Indicador de status + Nome completo + Badge Berço */}
+                          <div className="flex items-center space-x-1.5 min-w-0 flex-1">
+                            {isOperating ? (
                               <span
-                                className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 text-[9px] px-1.5 py-0.2 rounded font-mono font-bold border border-emerald-300 dark:border-emerald-500/40 flex items-center space-x-0.5"
-                                title={`Progresso Operacional no Berço: ${navio.progresso_operacao.toFixed(1).replace('.', ',')}%`}
+                                className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"
+                                title="Navio Operando no Berço"
+                              />
+                            ) : (
+                              <span
+                                className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 shrink-0"
+                                title="Navio na Fila de Atracação"
+                              />
+                            )}
+                            <span
+                              className="font-extrabold text-[13px] text-slate-900 dark:text-slate-100 truncate"
+                              title={navio.nome_navio}
+                            >
+                              {navio.nome_navio}
+                            </span>
+                            {/* Badge de Designação de Berço */}
+                            {(() => {
+                              const bercoEfetivo = navio.berco || '101';
+                              const is101 = bercoEfetivo === '101';
+                              return (
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.2 rounded font-black tracking-wider border shrink-0 ${
+                                    is101
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-500/40'
+                                      : 'bg-cyan-50 text-cyan-700 border-cyan-300 dark:bg-cyan-950/80 dark:text-cyan-300 dark:border-cyan-500/40'
+                                  }`}
+                                  title={`Designação Oficial: Berço ${bercoEfetivo} (${is101 ? 'Cais Comercial' : 'Cais Interno'})`}
+                                >
+                                  B-{bercoEfetivo}
+                                </span>
+                              );
+                            })()}
+                          </div>
+
+                          {/* Lado Direito: Mercadoria + Volume */}
+                          <div className="flex items-center space-x-1 shrink-0 text-right font-mono text-[11px]">
+                            <span className="font-semibold text-slate-800 dark:text-cyan-300 max-w-[90px] truncate" title={navio.mercadoria}>
+                              {navio.mercadoria}
+                            </span>
+                            {isCargaSensivelChuva(navio.mercadoria) && (
+                              <span
+                                title="Granel sensível à água: operação sujeita a interrupção por chuva."
+                                className="cursor-help text-[11px]"
                               >
-                                <span>⚡</span>
-                                <span>{navio.progresso_operacao.toFixed(1).replace('.', ',')}%</span>
+                                🌧️
                               </span>
+                            )}
+                            <span className="text-slate-300 dark:text-slate-600">&bull;</span>
+                            <span className="text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap">
+                              {navio.volume_t.toLocaleString('pt-BR')} t
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Linha 2: Progresso Slim Único OU Início Previsto • Alertas Críticos • Saída/Cais */}
+                        <div className="flex items-center justify-between gap-1.5 min-w-0 pt-1 border-t border-slate-100 dark:border-cco-border/30">
+                          {/* Lado Esquerdo: Progresso Único (se Operando) OU Início Previsto (se Fila) */}
+                          <div className="flex items-center space-x-2 shrink-0">
+                            {isOperating ? (
+                              navio.progresso_operacao !== undefined && navio.progresso_operacao !== null && navio.progresso_operacao > 0 ? (
+                                <div
+                                  className="relative w-28 h-[18px] bg-slate-200/90 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-300 dark:border-slate-700/80 flex items-center shadow-inner"
+                                  title={`Progresso da Operação no Berço: ${navio.progresso_operacao.toFixed(1).replace('.', ',')}%`}
+                                >
+                                  <div
+                                    className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
+                                    style={{ width: `${Math.min(100, Math.max(0, navio.progresso_operacao))}%` }}
+                                  />
+                                  <span className="absolute inset-0 flex items-center justify-center text-[9px] font-mono font-black text-slate-900 dark:text-white drop-shadow-sm leading-none">
+                                    ⚡ {navio.progresso_operacao.toFixed(1).replace('.', ',')}%
+                                  </span>
+                                </div>
+                              ) : (
+                                <span
+                                  className="bg-amber-50 text-amber-700 dark:bg-amber-950/70 dark:text-amber-300 text-[9px] px-1.5 py-0.5 rounded font-mono font-medium border border-amber-300 dark:border-amber-500/40 flex items-center space-x-0.5"
+                                  title="Progresso operacional em apuração"
+                                >
+                                  <span>⏳</span>
+                                  <span>Em apuração</span>
+                                </span>
+                              )
+                            ) : (
+                              <div className="flex items-center space-x-1 text-[10px] font-mono text-slate-600 dark:text-slate-400">
+                                <Clock className="w-3 h-3 text-blue-500 dark:text-cyan-400 shrink-0" />
+                                <span className="text-slate-400 dark:text-slate-500 text-[9px]">Início:</span>
+                                <span className="font-bold text-slate-800 dark:text-slate-200 text-[10px]">
+                                  {formatarDataHoraCurta(navio.inicio_atracacao || navio.eta_previsto)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Centro: Pílulas Compactas de Alerta Crítico */}
+                          <div className="flex items-center space-x-1 min-w-0 overflow-hidden truncate">
+                            {navio.restricao_mare?.temRestricao ? (
+                              <span
+                                title={`Alerta de Restrição de Maré (DHN):\n${navio.restricao_mare.resumoAlerta}`}
+                                className="text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-0.5 shrink-0 cursor-help border bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-500/40 font-bold"
+                              >
+                                <span>🌊</span>
+                                <span>Maré Restrita</span>
+                              </span>
+                            ) : null}
+
+                            {navio.manobra_praticagem_str ? (
+                              <span
+                                title={`Praticagem de São Sebastião:\n${navio.manobra_praticagem_str}\nCategoria: ${navio.categoria_manobra || 'N/A'}`}
+                                className={`text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-0.5 shrink-0 cursor-help border ${
+                                  navio.confianca_manobra === 'CONFIRMADA'
+                                    ? 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-200 dark:border-purple-400 font-bold'
+                                    : 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-500/40 border-dashed'
+                                }`}
+                              >
+                                <span>⚓</span>
+                                <span>Praticagem</span>
+                              </span>
+                            ) : null}
+
+                            {divergencia?.temDivergencia ? (
+                              <span
+                                title={`Divergência de ETA:\nSISPORT: ${formatarDataBr(navio.eta_previsto)}\nAIS: ${formatarDataBr(navio.eta_ais)}\n${divergencia.textoDetalhado}`}
+                                className={`text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-0.5 shrink-0 cursor-help border ${divergencia.corBadge} font-bold`}
+                              >
+                                <AlertTriangle className="w-2.5 h-2.5" />
+                                <span>{divergencia.tipoAlerta === 'atraso' ? 'AIS Atraso' : divergencia.tipoAlerta === 'adiantado' ? 'AIS Adiantado' : 'Alerta AIS'}</span>
+                              </span>
+                            ) : !isOperating && navio.confianca_previsao ? (
+                              <span
+                                title={`Confiabilidade do Modelo: ${navio.confianca_previsao} (${navio.precisao_estimada ?? 95}% de precisão)`}
+                                className="text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-0.5 shrink-0 cursor-help border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-500/30 font-semibold"
+                              >
+                                <span>🎯</span>
+                                <span>{navio.confianca_previsao}</span>
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {/* Lado Direito: Saída Prevista (se Operando) ou Cais Estimado (se Fila) */}
+                          <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 shrink-0 text-right">
+                            {isOperating && navio.fim_atracacao ? (
+                              <span title={`Desatracação / Saída Prevista: ${formatarDataBr(navio.fim_atracacao)}`}>
+                                <span className="text-slate-400 dark:text-slate-500 text-[9px]">Saída: </span>
+                                <span className="font-bold text-slate-800 dark:text-slate-200">{formatarDataHoraCurta(navio.fim_atracacao)}</span>
+                              </span>
+                            ) : navio.duracao_estimada_horas ? (
+                              <span title={`Duração estimada de cais: ${navio.duracao_estimada_horas}h (${navio.duracao_base_horas || 0}h operação + 2h manobra)`}>
+                                <span className="text-slate-400 dark:text-slate-500 text-[9px]">Cais: </span>
+                                <span className="font-bold text-slate-800 dark:text-slate-200">~{navio.duracao_estimada_horas}h</span>
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* MODO DETALHADO: Layout completo expandido com LOA, Calados, IMO e especificações completas */}
+                      <div className="flex items-center space-x-3 overflow-hidden flex-1 min-w-0">
+                        {/* Badge da ordem na fila */}
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                            isOperating
+                              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400'
+                              : 'bg-slate-800 text-slate-300 border border-slate-700'
+                          }`}
+                        >
+                          {navio.ordem_fila.toString().padStart(2, '0')}
+                        </div>
+
+                        {/* Dados Centrais do Navio estruturados */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-center space-y-0.5 overflow-hidden">
+                          {/* Top subheader: 1º NAVIO • OPERANDO ou 2º NAVIO • Na fila */}
+                          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+                            <span className="text-slate-500 dark:text-slate-400">
+                              {navio.ordem_fila}º NAVIO
+                            </span>
+                            {isOperating ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-extrabold flex items-center space-x-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span>• OPERANDO</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 dark:text-slate-500 font-medium">
+                                Na fila
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Linha 1: Nome do Navio + Badge Berço + Badge No Berço + Progresso % */}
+                          <div className="flex items-center space-x-1.5 min-w-0">
+                            <span
+                              className="font-extrabold text-sm text-slate-900 dark:text-slate-100 transition-colors truncate"
+                              title={navio.nome_navio}
+                            >
+                              {navio.nome_navio}
+                            </span>
+                            {/* Badge de Designação de Berço (Berço 101 a 204) */}
+                            {(() => {
+                              const bercoEfetivo = navio.berco || '101';
+                              const is101 = bercoEfetivo === '101';
+                              return (
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.2 rounded font-black tracking-wider border shrink-0 ${
+                                    is101
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-500/40'
+                                      : 'bg-cyan-50 text-cyan-700 border-cyan-300 dark:bg-cyan-950/80 dark:text-cyan-300 dark:border-cyan-500/40'
+                                  }`}
+                                  title={`Designação Oficial: Berço ${bercoEfetivo} (${is101 ? 'Cais Comercial' : 'Cais Interno'})`}
+                                >
+                                  B-{bercoEfetivo}
+                                </span>
+                              );
+                            })()}
+                            {isOperating && (
+                              <div className="flex items-center space-x-1 shrink-0">
+                                <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 text-[9px] px-1.5 py-0.2 rounded font-bold border border-emerald-200 dark:border-emerald-500/40">
+                                  NO BERÇO
+                                </span>
+                                {navio.progresso_operacao !== undefined && navio.progresso_operacao !== null && navio.progresso_operacao > 0 ? (
+                                  <span
+                                    className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 text-[9px] px-1.5 py-0.2 rounded font-mono font-bold border border-emerald-300 dark:border-emerald-500/40 flex items-center space-x-0.5"
+                                    title={`Progresso Operacional no Berço: ${navio.progresso_operacao.toFixed(1).replace('.', ',')}%`}
+                                  >
+                                    <span>⚡</span>
+                                    <span>{navio.progresso_operacao.toFixed(1).replace('.', ',')}%</span>
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="bg-amber-50 text-amber-700 dark:bg-amber-950/70 dark:text-amber-300 text-[9px] px-1.5 py-0.2 rounded font-mono font-medium border border-amber-300 dark:border-amber-500/40 flex items-center space-x-0.5"
+                                    title="Progresso operacional em apuração pelo operador portuário"
+                                  >
+                                    <span>⏳</span>
+                                    <span>Em apuração</span>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Linha 2: Dimensões Operacionais Primárias (Calado e LOA) + Registro IMO */}
+                          <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-mono flex items-center space-x-1.5 whitespace-nowrap overflow-hidden">
+                            <span
+                              className={`font-semibold flex items-center space-x-0.5 ${
+                                navio.restricao_mare?.temRestricao ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-blue-700 dark:text-cyan-300'
+                              }`}
+                              title={
+                                navio.restricao_mare?.resumoAlerta ||
+                                `Calado Entrada: ${navio.calado_entrada || navio.calado || '-'}m | Calado Saída: ${navio.calado_saida || navio.calado || '-'}m`
+                              }
+                            >
+                              {navio.restricao_mare?.temRestricao && <span>🌊⚠️</span>}
+                              <span>
+                                {navio.calado_entrada && navio.calado_saida && Math.abs(navio.calado_entrada - navio.calado_saida) > 0.1
+                                  ? `Cal. E:${Number(navio.calado_entrada).toFixed(1)}/S:${Number(navio.calado_saida).toFixed(1)}m`
+                                  : `Cal. ${navio.calado ? `${Number(navio.calado).toFixed(1)}m` : '-'}`}
+                              </span>
+                            </span>
+                            <span className="text-slate-300 dark:text-slate-600">&bull;</span>
+                            <span className="text-slate-700 dark:text-slate-300">LOA {navio.loa}m</span>
+                            <span className="text-slate-300 dark:text-slate-600">&bull;</span>
+                            <span className="text-slate-500 dark:text-slate-400">IMO {navio.imo}</span>
+                            {navio.confianca_previsao && !isOperating && (
+                              <>
+                                <span className="text-slate-300 dark:text-slate-600">&bull;</span>
+                                <span
+                                  className="text-emerald-700 dark:text-emerald-300 font-bold text-[9px] cursor-help inline-flex items-center space-x-0.5"
+                                  title={`Confiabilidade do Modelo: ${navio.confianca_previsao} (${navio.precisao_estimada ?? 95}% de precisão esperada)`}
+                                >
+                                  <span>🎯</span>
+                                  <span>{navio.confianca_previsao}</span>
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Linha 3: Status da Telemetria AIS ou Alerta de Maré/Divergência / Praticagem */}
+                          <div className="min-w-0 flex items-center space-x-1 overflow-hidden">
+                            {navio.manobra_praticagem_str && (
+                              <span
+                                title={`Praticagem de São Sebastião:\n${navio.manobra_praticagem_str}\nCategoria: ${navio.categoria_manobra || 'N/A'}\nConfiança: ${navio.confianca_manobra || 'ESTIMADA'}`}
+                                className={`text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-1 shrink-0 cursor-help border ${
+                                  navio.confianca_manobra === 'CONFIRMADA'
+                                    ? 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-200 dark:border-purple-400 font-bold'
+                                    : 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-500/40 border-dashed'
+                                } max-w-full truncate`}
+                              >
+                                <span>⚓</span>
+                                <span className="truncate">
+                                  {navio.origem_previsao_fim === 'PRATICAGEM' ? 'Saída Praticagem' : 'Praticagem'}
+                                  {navio.categoria_manobra ? ` (${navio.categoria_manobra})` : ''}
+                                </span>
+                              </span>
+                            )}
+                            {navio.restricao_mare?.temRestricao ? (
+                              <span
+                                title={`Alerta de Restrição de Calado & Maré (DHN):\n${navio.restricao_mare.resumoAlerta}\nCalado do Navio: ${navio.calado}m | Profundidade Berço (ZH): ${navio.restricao_mare.profundidadeBercoZh}m\nAtracação: ${navio.restricao_mare.atracacao ? `Maré ${navio.restricao_mare.atracacao.alturaMare.toFixed(2)}m (UKC ${navio.restricao_mare.atracacao.ukcCalculado.toFixed(2)}m)` : 'N/A'}\nRecomendação: Aguardar Preamar para manobra`}
+                                className="text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-1 shrink-0 cursor-help border bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-500/40 font-bold max-w-full truncate"
+                              >
+                                <span>🌊⚠️</span>
+                                <span className="truncate">{navio.restricao_mare.resumoAlerta}</span>
+                              </span>
+                            ) : divergencia?.temDivergencia ? (
+                              <span
+                                title={`Divergência de ETA:\nSISPORT (Oficial): ${formatarDataBr(navio.eta_previsto)}\nAIS (DataDocked): ${formatarDataBr(navio.eta_ais)}\n${divergencia.textoDetalhado}`}
+                                className={`text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-1 shrink-0 cursor-help border max-w-full truncate ${
+                                  isOperating
+                                    ? 'bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800/80 dark:text-slate-400 dark:border-slate-700/60'
+                                    : `${divergencia.corBadge} font-bold`
+                                }`}
+                              >
+                                <AlertTriangle className={`w-2.5 h-2.5 shrink-0 ${isOperating ? 'text-slate-500' : ''}`} />
+                                <span className="truncate">{divergencia.textoResumo}</span>
+                              </span>
+                            ) : navio.ais_sincronizado_em ? (
+                              <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400/90 flex items-center space-x-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
+                                <span>AIS Conectado</span>
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-mono text-slate-400 dark:text-slate-500">
+                                Aguardando AIS
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Informação de Carga, Volume, Sensibilidade à Chuva e Progresso Operacional */}
+                      <div className="text-right shrink-0 pl-2 flex flex-col justify-center">
+                        <div className="flex items-center justify-end space-x-1">
+                          <span className="text-xs font-semibold text-slate-800 dark:text-cyan-300 block truncate max-w-[100px]" title={navio.mercadoria}>
+                            {navio.mercadoria}
+                          </span>
+                          {isCargaSensivelChuva(navio.mercadoria) && (
+                            <span
+                              title="Granel sensível à água: operação sujeita a interrupção por fechamento de escotilhas sob chuva."
+                              className="text-[9px] bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/80 dark:text-sky-300 dark:border-sky-500/30 px-1 py-0.2 rounded font-mono flex items-center space-x-0.5 shrink-0 cursor-help"
+                            >
+                              <span>🌧️</span>
+                              <span className="hidden xl:inline text-[8px] font-semibold">Sensível</span>
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+                          {navio.volume_t.toLocaleString('pt-BR')} t
+                        </span>
+                        {isOperating && (
+                          <div className="mt-1 flex flex-col items-end">
+                            {navio.progresso_operacao !== undefined && navio.progresso_operacao !== null && navio.progresso_operacao > 0 ? (
+                              <>
+                                <div className="flex items-center space-x-1 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                  <span className="text-[8.5px] text-slate-400 dark:text-slate-500 font-normal">Progresso:</span>
+                                  <span>{navio.progresso_operacao.toFixed(1).replace('.', ',')}%</span>
+                                </div>
+                                <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden mt-0.5 shadow-inner" title={`Operação: ${navio.progresso_operacao.toFixed(1).replace('.', ',')}% concluída`}>
+                                  <div
+                                    className="h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-all duration-300"
+                                    style={{ width: `${Math.min(100, Math.max(0, navio.progresso_operacao))}%` }}
+                                  />
+                                </div>
+                              </>
+                            ) : (
+                              <div className="flex items-center space-x-1 text-[9.5px] font-mono text-amber-600 dark:text-amber-400">
+                                <span className="text-[8.5px] text-slate-400 dark:text-slate-500 font-normal">Progresso:</span>
+                                <span className="font-semibold italic">Em apuração</span>
+                              </div>
                             )}
                           </div>
                         )}
                       </div>
-
-                      {/* Linha 2: Dimensões Operacionais Primárias (Calado e LOA) + Registro IMO */}
-                      <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-mono flex items-center space-x-1.5 whitespace-nowrap overflow-hidden">
-                        <span
-                          className={`font-semibold flex items-center space-x-0.5 ${
-                            navio.restricao_mare?.temRestricao ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-blue-700 dark:text-cyan-300'
-                          }`}
-                          title={
-                            navio.restricao_mare?.resumoAlerta ||
-                            `Calado Entrada: ${navio.calado_entrada || navio.calado || '-'}m | Calado Saída: ${navio.calado_saida || navio.calado || '-'}m`
-                          }
-                        >
-                          {navio.restricao_mare?.temRestricao && <span>🌊⚠️</span>}
-                          <span>
-                            {navio.calado_entrada && navio.calado_saida && Math.abs(navio.calado_entrada - navio.calado_saida) > 0.1
-                              ? `Cal. E:${Number(navio.calado_entrada).toFixed(1)}/S:${Number(navio.calado_saida).toFixed(1)}m`
-                              : `Cal. ${navio.calado ? `${Number(navio.calado).toFixed(1)}m` : '-'}`}
-                          </span>
-                        </span>
-                        <span className="text-slate-300 dark:text-slate-600">&bull;</span>
-                        <span className="text-slate-700 dark:text-slate-300">LOA {navio.loa}m</span>
-                        <span className="text-slate-300 dark:text-slate-600">&bull;</span>
-                        <span className="text-slate-500 dark:text-slate-400">IMO {navio.imo}</span>
-                      </div>
-
-                      {/* Linha 3: Status da Telemetria AIS ou Alerta de Maré/Divergência / Praticagem */}
-                      <div className="min-w-0 flex items-center space-x-1 overflow-hidden">
-                        {navio.manobra_praticagem_str && (
-                          <span
-                            title={`Praticagem de São Sebastião:\n${navio.manobra_praticagem_str}`}
-                            className="text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-1 shrink-0 cursor-help border bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-500/40 font-bold max-w-full truncate"
-                          >
-                            <span>⚓</span>
-                            <span className="truncate">
-                              {navio.origem_previsao_fim === 'PRATICAGEM' ? 'Saída Praticagem' : 'Praticagem'}
-                            </span>
-                          </span>
-                        )}
-                        {navio.restricao_mare?.temRestricao ? (
-                          <span
-                            title={`Alerta de Restrição de Calado & Maré (DHN):\n${navio.restricao_mare.resumoAlerta}\nCalado do Navio: ${navio.calado}m | Profundidade Berço (ZH): ${navio.restricao_mare.profundidadeBercoZh}m\nAtracação: ${navio.restricao_mare.atracacao ? `Maré ${navio.restricao_mare.atracacao.alturaMare.toFixed(2)}m (UKC ${navio.restricao_mare.atracacao.ukcCalculado.toFixed(2)}m)` : 'N/A'}\nRecomendação: Aguardar Preamar para manobra`}
-                            className="text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-1 shrink-0 cursor-help border bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-500/40 font-bold max-w-full truncate"
-                          >
-                            <span>🌊⚠️</span>
-                            <span className="truncate">{navio.restricao_mare.resumoAlerta}</span>
-                          </span>
-                        ) : divergencia?.temDivergencia ? (
-                          <span
-                            title={`Divergência de ETA:\nSISPORT (Oficial): ${formatarDataBr(navio.eta_previsto)}\nAIS (DataDocked): ${formatarDataBr(navio.eta_ais)}\n${divergencia.textoDetalhado}`}
-                            className={`text-[9px] px-1.5 py-0.5 rounded font-mono inline-flex items-center space-x-1 shrink-0 cursor-help border max-w-full truncate ${
-                              isOperating
-                                ? 'bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800/80 dark:text-slate-400 dark:border-slate-700/60'
-                                : `${divergencia.corBadge} font-bold`
-                            }`}
-                          >
-                            <AlertTriangle className={`w-2.5 h-2.5 shrink-0 ${isOperating ? 'text-slate-500' : ''}`} />
-                            <span className="truncate">{divergencia.textoResumo}</span>
-                          </span>
-                        ) : navio.ais_sincronizado_em ? (
-                          <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400/90 flex items-center space-x-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
-                            <span>AIS Conectado</span>
-                          </span>
-                        ) : (
-                          <span className="text-[9px] font-mono text-slate-400 dark:text-slate-500">
-                            Aguardando AIS
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Informação de Carga, Volume, Sensibilidade à Chuva e Progresso Operacional */}
-                  <div className="text-right shrink-0 pl-2 flex flex-col justify-center">
-                    <div className="flex items-center justify-end space-x-1">
-                      <span className="text-xs font-semibold text-slate-800 dark:text-cyan-300 block truncate max-w-[100px]" title={navio.mercadoria}>
-                        {navio.mercadoria}
-                      </span>
-                      {isCargaSensivelChuva(navio.mercadoria) && (
-                        <span
-                          title="Granel sensível à água: operação sujeita a interrupção por fechamento de escotilhas sob chuva."
-                          className="text-[9px] bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/80 dark:text-sky-300 dark:border-sky-500/30 px-1 py-0.2 rounded font-mono flex items-center space-x-0.5 shrink-0 cursor-help"
-                        >
-                          <span>🌧️</span>
-                          <span className="hidden xl:inline text-[8px] font-semibold">Sensível</span>
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
-                      {navio.volume_t.toLocaleString('pt-BR')} t
-                    </span>
-                    {isOperating && navio.progresso_operacao !== undefined && navio.progresso_operacao !== null && (
-                      <div className="mt-1 flex flex-col items-end">
-                        <div className="flex items-center space-x-1 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                          <span className="text-[8.5px] text-slate-400 dark:text-slate-500 font-normal">Progresso:</span>
-                          <span>{navio.progresso_operacao.toFixed(1).replace('.', ',')}%</span>
-                        </div>
-                        <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden mt-0.5 shadow-inner" title={`Operação: ${navio.progresso_operacao.toFixed(1).replace('.', ',')}% concluída`}>
-                          <div
-                            className="h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-all duration-300"
-                            style={{ width: `${Math.min(100, Math.max(0, navio.progresso_operacao))}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    </>
+                  )}
 
                   {/* Popover de Detalhes da Embarcação Projetado à Direita da Coluna Lateral (sobre Histórico Consumido) */}
                   {hoveredNavio?.id === navio.id && (
@@ -1127,6 +1473,18 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           </span>
                         </div>
                         <div>
+                          <span className="text-slate-500 dark:text-slate-400 text-[10px] block">Dimensões Náuticas:</span>
+                          <span className="text-slate-900 dark:text-slate-100 font-semibold block">
+                            LOA {navio.loa}m • DWT {navio.dwt ? `${navio.dwt.toLocaleString('pt-BR')} t` : '-'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 dark:text-slate-400 text-[10px] block">Berço / Agência:</span>
+                          <span className="text-slate-900 dark:text-slate-100 font-semibold block truncate" title={navio.agencia || '-'}>
+                            B-{navio.berco || '101'} {navio.agencia ? `• ${navio.agencia}` : ''}
+                          </span>
+                        </div>
+                        <div>
                           <span className="text-slate-500 dark:text-slate-400 text-[10px] block">ETA / Fundeio:</span>
                           <span className="text-slate-700 dark:text-slate-200 block text-[10px]">
                             {navio.chegada_fundeio
@@ -1150,6 +1508,14 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                             Entrada: {navio.calado_entrada ? `${Number(navio.calado_entrada).toFixed(1)}m` : `${navio.calado || '-'}m`} • Saída: {navio.calado_saida ? `${Number(navio.calado_saida).toFixed(1)}m` : `${navio.calado || '-'}m`}
                           </span>
                         </div>
+                        {navio.manobra_praticagem_str && (
+                          <div className="col-span-2 pt-1 border-t border-slate-200 dark:border-slate-700/60 text-[10px] flex items-center justify-between">
+                            <span className="text-slate-500 dark:text-slate-400">Praticagem (São Sebastião):</span>
+                            <span className="text-purple-700 dark:text-purple-300 font-semibold truncate max-w-[180px]" title={navio.manobra_praticagem_str}>
+                              ⚓ {navio.manobra_praticagem_str}
+                            </span>
+                          </div>
+                        )}
                         {isOperating && navio.progresso_operacao !== undefined && navio.progresso_operacao !== null && (
                           <div className="col-span-2 pt-1.5 border-t border-slate-200 dark:border-slate-700/60">
                             <div className="flex items-center justify-between text-[10.5px] font-mono">
@@ -1327,6 +1693,31 @@ export const GanttChart: React.FC<GanttChartProps> = ({
               </span>
             </div>
           </div>
+
+          <div className="h-8 w-px bg-slate-200 dark:bg-cco-border"></div>
+
+          {/* Acurácia e Confiabilidade do Modelo Preditivo (Melhoria 4.3) */}
+          <div
+            className="flex items-center space-x-3 group/acuracia relative cursor-help"
+            title={`Índice de Confiabilidade Histórica: ${operacional?.metricas_acuracia?.taxa_acuracia_geral ?? 95}%\nErro Médio Atracação (MAE): ±${operacional?.metricas_acuracia?.mae_atracacao_horas ?? 1.5}h\nErro Médio Desatracação (MAE): ±${operacional?.metricas_acuracia?.mae_desatracacao_horas ?? 2.0}h\nTotal de Escalas Auditadas: ${operacional?.metricas_acuracia?.total_escalas_avaliadas ?? 3}`}
+          >
+            <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-600 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
+              <Target className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                Acurácia Modelo
+              </span>
+              <div className="flex items-baseline space-x-1.5">
+                <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-300 font-mono">
+                  {operacional?.metricas_acuracia?.taxa_acuracia_geral ?? 95}%
+                </span>
+                <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
+                  {operacional?.metricas_acuracia?.confianca_modelo || 'ALTA'}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Taxa de Ocupação do Berço & Backlog da Fila */}
@@ -1337,19 +1728,19 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           <div className="text-right">
             <div className="flex items-center justify-end space-x-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400 shrink-0" />
-              <span>Ocupação do Berço (Janela 30D)</span>
+              <span>Ocupação do Berço (Janela {currentScale}D)</span>
             </div>
             <div className="flex items-baseline justify-end space-x-2">
               <span className="text-base font-extrabold text-blue-700 dark:text-cyan-300 font-mono">
-                {ocupacaoJanela30d}%
+                {ocupacaoJanelaVisivel}%
               </span>
             </div>
             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5 whitespace-nowrap">
               <span>Fila Total: </span>
               <strong className="text-slate-800 dark:text-slate-200">{totalHorasBacklogStr}h</strong>
-              <span> • Demanda: </span>
-              <strong className="text-amber-600 dark:text-amber-300">{demandaPercentualStr}%</strong>
-              <span className="text-slate-500 dark:text-slate-400"> (~{diasCaisEstimados} dias de cais)</span>
+              <span> • Término: </span>
+              <strong className="text-emerald-600 dark:text-emerald-400">{dataTerminoFilaStr}</strong>
+              <span className="text-slate-500 dark:text-slate-400"> (~{diasCaisEstimados} dias)</span>
             </div>
           </div>
 
@@ -1360,7 +1751,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           >
             <div
               className="h-full bg-gradient-to-r from-blue-600 to-emerald-500 dark:from-cyan-500 dark:to-emerald-400 rounded-full transition-all duration-500"
-              style={{ width: `${ocupacaoJanela30d}%` }}
+              style={{ width: `${ocupacaoJanelaVisivel}%` }}
             />
           </div>
 
@@ -1568,23 +1959,31 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             )}
 
             {/* Progresso Operacional & Run-Rate Real para Navio em Operação */}
-            {!isLaranja && !isVermelho && hoveredBloco.navio.status_cor === 'VERDE' && hoveredBloco.navio.progresso_operacao !== null && hoveredBloco.navio.progresso_operacao !== undefined && (
+            {!isLaranja && !isVermelho && hoveredBloco.navio.status_cor === 'VERDE' && (
               <div className="mt-2.5 bg-emerald-950/40 rounded-lg p-2.5 border border-emerald-800/60 font-mono text-[11px] space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-emerald-300 font-bold flex items-center gap-1">
                     <span>⚡</span> Progresso Real do Cais:
                   </span>
-                  <span className="font-bold text-white bg-emerald-600/80 px-1.5 py-0.5 rounded text-[10px]">
-                    {Number(hoveredBloco.navio.progresso_operacao).toFixed(1)}%
-                  </span>
+                  {hoveredBloco.navio.progresso_operacao !== null && hoveredBloco.navio.progresso_operacao !== undefined && hoveredBloco.navio.progresso_operacao > 0 ? (
+                    <span className="font-bold text-white bg-emerald-600/80 px-1.5 py-0.5 rounded text-[10px]">
+                      {Number(hoveredBloco.navio.progresso_operacao).toFixed(1)}%
+                    </span>
+                  ) : (
+                    <span className="font-medium text-amber-300 bg-amber-950/80 border border-amber-600/60 px-1.5 py-0.5 rounded text-[10px]">
+                      Em apuração
+                    </span>
+                  )}
                 </div>
 
-                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="bg-emerald-400 h-full transition-all duration-300 rounded-full"
-                    style={{ width: `${Math.min(100, Math.max(0, Number(hoveredBloco.navio.progresso_operacao)))}%` }}
-                  />
-                </div>
+                {hoveredBloco.navio.progresso_operacao !== null && hoveredBloco.navio.progresso_operacao !== undefined && hoveredBloco.navio.progresso_operacao > 0 && (
+                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="bg-emerald-400 h-full transition-all duration-300 rounded-full"
+                      style={{ width: `${Math.min(100, Math.max(0, Number(hoveredBloco.navio.progresso_operacao)))}%` }}
+                    />
+                  </div>
+                )}
 
                 {hoveredBloco.navio.volume_restante_t !== undefined && (
                   <div className="flex items-center justify-between text-slate-300 pt-0.5">

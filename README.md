@@ -3,16 +3,19 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-22_LTS-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/PostgreSQL-18-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Vitest-39_Passed-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Vitest 39 Tests" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
   <img src="https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Gantt_Density-Essencial_%26_Detalhado-3b82f6?style=for-the-badge&logo=blueprint&logoColor=white" alt="Modos Essencial e Detalhado" />
+  <img src="https://img.shields.io/badge/Berços-101_&_201--204-10b981?style=for-the-badge&logo=port&logoColor=white" alt="Alocação Multi-Berço" />
   <img src="https://img.shields.io/badge/Praticagem-SP_Pilots-8b5cf6?style=for-the-badge&logo=anchor&logoColor=white" alt="Praticagem SP Pilots" />
   <img src="https://img.shields.io/badge/Themes-Dark_%26_Light-0ea5e9?style=for-the-badge&logo=w3c&logoColor=white" alt="Dark & Light Themes" />
   <img src="https://img.shields.io/badge/Dokploy-Supported-6366F1?style=for-the-badge&logo=linux&logoColor=white" alt="Dokploy" />
 </p>
 
 > **Sistema Web Operacional de Alta Densidade e Análise Preditiva para Centros de Controle Operacional (CCO)**  
-> Desenvolvido sob medida para a **Companhia Docas de São Sebastião (CDSS)**, com motor determinístico em UTC invariante para berço comercial único, alternância ergonômica entre **Dark e Light Mode**, validação cruzada de telemetria satelital (**AIS DataDocked** vs **SISPORT Oficial**), integração em tempo real com a **Pauta de Serviços da Praticagem de São Paulo (SP Pilots)** com **Ajuste Operacional Automático (Projeção Real)**, telemetria maregráfica em tempo real (**SP Pilots** & **DHN**), análise preditiva de **Folga Abaixo da Quilha (UKC - Under Keel Clearance)** com **Duplo Calado Náutico (Entrada vs. Saída)**, acompanhamento em tempo real do **% de progresso de operação em berço (Run-Rate)**, resolução local de IMO via **Catálogo Naval (16.200+ embarcações)**, cartografia homologada **CARTO** e delimitação vetorial oficial da **Área do Porto Organizado (Portaria nº 501/2019 - MINFRA/ANTAQ)**.
+> Desenvolvido sob medida para a **Companhia Docas de São Sebastião (CDSS)**, com motor determinístico em UTC invariante para berço comercial único e berços de apoio/cabotagem, modos de densidade no Gantt (**Essencial** de 2 linhas arejadas sem sobrecarga visual vs. **Detalhado** com especificações náuticas completas) persistidos em `localStorage`, **Ficha Técnica Flutuante** (prontuário náutico no hover), alternância ergonômica entre **Dark e Light Mode**, escalas temporais reativas (**7D**, **14D** e **28D**), validação cruzada de telemetria satelital (**AIS DataDocked** vs **SISPORT Oficial**), integração em tempo real com a **Pauta de Serviços da Praticagem de São Paulo (SP Pilots)** com **Ajuste Operacional Automático (Projeção Real)**, telemetria maregráfica em tempo real (**SP Pilots** & **DHN**), análise preditiva de **Folga Abaixo da Quilha (UKC - Under Keel Clearance)** com **Duplo Calado Náutico (Entrada vs. Saída)**, acompanhamento em tempo real do **% de progresso de operação em berço (Run-Rate)**, métricas de **Acurácia Preditiva e Confiabilidade do Modelo**, cálculo dinâmico de **Ocupação da Janela e Término Real da Fila**, resolução local de IMO via **Catálogo Naval (16.200+ embarcações)**, cartografia homologada **CARTO** e delimitação vetorial oficial da **Área do Porto Organizado (Portaria nº 501/2019 - MINFRA/ANTAQ)**.
 
 ---
 
@@ -30,15 +33,23 @@
    - 3.7. [Interpolação Harmônica Sinusoidal de Maré (Curva Contínua)](#37-interpolação-harmônica-sinusoidal-de-maré-curva-contínua)
    - 3.8. [Auditoria de Divergência Temporal de ETA (SISPORT vs. AIS)](#38-auditoria-de-divergência-temporal-de-eta-sisport-vs-ais)
    - 3.9. [Algoritmo de Encadeamento em Cascata (Waterfall Scheduling)](#39-algoritmo-de-encadeamento-em-cascata-waterfall-scheduling)
-   - 3.10. [Taxa de Ocupação do Berço, Carga Total e Backlog de Carteira](#310-taxa-de-ocupação-do-berço-carga-total-e-backlog-de-carteira)
-   - 3.11. [Algoritmo de Resolução de IMO (Jaro-Winkler)](#311-algoritmo-de-resolução-de-imo-jaro-winkler)
-   - 3.12. [Preservação de Estados Operacionais e Fundeio Real](#312-preservação-de-estados-operacionais-e-fundeio-real)
+   - 3.10. [Taxa de Ocupação da Janela e Término Real da Fila](#310-taxa-de-ocupação-da-janela-e-término-real-da-fila)
+   - 3.11. [Acurácia do Modelo Preditivo e Níveis de Confiabilidade](#311-acurácia-do-modelo-preditivo-e-níveis-de-confiabilidade)
+   - 3.12. [Alocação Dinâmica Multi-Berço (Berço 101 vs. Cais Interno 201–204)](#312-alocação-dinâmica-multi-berço-berço-101-vs-cais-interno-201204)
+   - 3.13. [Algoritmo de Resolução de IMO (Jaro-Winkler)](#313-algoritmo-de-resolução-de-imo-jaro-winkler)
+   - 3.14. [Preservação de Estados Operacionais e Fundeio Real](#314-preservação-de-estados-operacionais-e-fundeio-real)
 4. [Inovações e Ergonomia Visual do Gantt CCO (v2.0)](#4-inovações-e-ergonomia-visual-do-gantt-cco-v20)
+   - 4.1. [Modos de Densidade Operacional (Essencial vs. Detalhado)](#41-modos-de-densidade-operacional-essencial-vs-detalhado)
+   - 4.2. [Ficha Técnica Flutuante (Prontuário Náutico no Hover)](#42-ficha-técnica-flutuante-prontuário-náutico-no-hover)
+   - 4.3. [Escala Temporal Reativa Selecionável (7D, 14D e 28D)](#43-escala-temporal-reativa-selecionável-7d-14d-e-28d)
+   - 4.4. [Cabeçalho Empilhado Fixo (Sticky Stack) & Linha Dourada "AGORA"](#44-cabeçalho-empilhado-fixo-sticky-stack--linha-dourada-agora)
+   - 4.5. [Fitas Contínuas de Ocupação Multi-Berço](#45-fitas-contínuas-de-ocupação-multi-berço)
+   - 4.6. [Barra Inferior de KPIs Operacionais & Widget de Acurácia](#46-barra-inferior-de-kpis-operacionais--widget-de-acurácia)
 5. [Integração com a Praticagem (SP Pilots) & Projeção Real](#5-integração-com-a-praticagem-sp-pilots--projeção-real)
 6. [Canal de São Sebastião & Cartografia ANTAQ](#6-canal-de-são-sebastião--cartografia-antaq)
 7. [Endpoints REST da API](#7-endpoints-rest-da-api)
 8. [Configuração do Ambiente (.env)](#8-configuração-do-ambiente-env)
-9. [Instruções de Execução Local](#9-instruções-de-execução-local)
+9. [Instruções de Execução Local & Testes](#9-instruções-de-execução-local--testes)
 10. [Deploy com Docker e Dokploy](#10-deploy-com-docker-e-dokploy)
 11. [Licença & Uso](#11-licença--uso)
 
@@ -322,26 +333,54 @@ flowchart TD
 
 ---
 
-### 3.10. Taxa de Ocupação do Berço, Carga Total e Backlog de Carteira
+### 3.10. Taxa de Ocupação da Janela e Término Real da Fila
 
-O cálculo de capacidade e ocupação do berço é dissociado em indicadores complementares para refletir a realidade operacional da infraestrutura portuária:
+O cálculo de capacidade e ocupação do berço é dissociado em indicadores complementares para refletir fielmente a dinâmica da infraestrutura portuária:
 
 1. **Carga Total Programada ($V_{\text{carteira}}$):**
    $$V_{\text{carteira}} = \sum_{i=1}^{N} V_{\text{total}}(i) \quad [\text{t}]$$
-   Somatório aritmético contínuo do volume manifestado de todas as $N$ embarcações ativas na fila oficial (ex: $252.050\,\text{t}$ distribuídas entre alumina, barrilha, malte, trigo e carga viva).
+   Somatório aritmético contínuo do volume manifestado de todas as $N$ embarcações ativas na fila oficial (ex: $209.294{,}4\,\text{t}$ distribuídas entre alumina, barrilha, malte, trigo, carga geral e carga viva).
 
-2. **Taxa de Ocupação Nominal (Janela Mensal de 30 Dias = 720 Horas):**
-   $$\text{Taxa Ocupação (30D)} = \min\left(100\%,\, \frac{\min(H_{\text{janela}}, 720)}{720} \times 100\%\right)$$
-   Onde $H_{\text{janela}}$ é a soma das horas de ocupação de cais que recaem estritamente dentro dos próximos 30 dias nominais ($30 \times 24 = 720\,\text{h}$) a partir do `AGORA`. Quando a carteira de navios ultrapassa 720 horas de fila contínua, o berço atinge a saturação física máxima de **100%**.
+2. **Taxa de Ocupação na Janela Visível ($W_{\text{janela}} \in \{7\text{D}, 14\text{D}, 28\text{D}\}$):**
+   Ao invés de uma métrica estática de 30 dias que não reflete a escala do operador, o sistema calcula a taxa de ocupação física efetiva da janela selecionada:
+   $$\text{Ocupação}_{\text{janela}} = \min\left(100\%,\, \frac{\sum_{i=1}^N \Delta t_{\text{visivel}}(i, W_{\text{janela}})}{W_{\text{horas}}} \times 100\%\right)$$
+   Onde $\Delta t_{\text{visivel}}(i, W_{\text{janela}})$ é a fração de tempo em que a embarcação $i$ ocupa o cais dentro da janela temporal, e $W_{\text{horas}} = 7 \times 24 = 168\,\text{h}$ (7D), $14 \times 24 = 336\,\text{h}$ (14D) ou $28 \times 24 = 672\,\text{h}$ (28D).
 
-3. **Demanda Total em Carteira (Backlog Acumulado e Dias de Cais):**
-   $$\text{Demanda Total (\%)} = \frac{\sum_{i=1}^{N} D_{\text{total}}(i)}{720} \times 100\%$$
-   $$\text{Dias de Cais Estimados} = \frac{\sum_{i=1}^{N} D_{\text{total}}(i)}{24} \quad [\text{dias}]$$
-   *Exemplo Real da Central:* Ocupação da janela $100\%$ | Backlog Total da Fila: $2.280{,}5\,\text{h}$ ($317{,}0\%$ de demanda acumulada frente à capacidade mensal, correspondendo a $\approx 95$ dias contínuos de cais). O tooltip de auditoria detalha a saturação nominal e o backlog em carteira.
+3. **Término Real da Fila e Horizonte de Atendimento ($t_{\text{fim\_fila}}$):**
+   $$t_{\text{fim\_fila}} = \max_{i=1 \dots N}(t_{\text{desatracacao}}(i))$$
+   $$\text{Tempo Restante de Fila} = \frac{t_{\text{fim\_fila}} - \text{Agora}}{3600 \times 1000} \quad [\text{horas}]$$
+   $$\text{Dias Corridos Estimados} = \frac{\text{Tempo Restante de Fila}}{24} \quad [\text{dias}]$$
+   *Exemplo Real da Central:* Ocupação da janela visível $80\%$ | Fila Total: $1.536{,}1\,\text{h}$ com término previsto para $18/12/2026$ ($\approx 64$ dias contínuos de operação ininterrupta).
 
 ---
 
-### 3.11. Algoritmo de Resolução de IMO (Jaro-Winkler)
+### 3.11. Acurácia do Modelo Preditivo e Níveis de Confiabilidade
+
+O motor determinístico atribui índices objetivos de confiabilidade a cada estimativa de escala, sumarizados em um indicador global de acurácia no rodapé da aplicação:
+
+1. **Níveis de Confiabilidade por Embarcação:**
+   * **ALTA ($\ge 90\%$ de precisão esperada):** Navio em berço com manobra de saída confirmada pela Praticagem (`PTA4` / `PTA6`) ou com run-rate consolidado ($P_{\text{operacao}} \ge 5\%$), ou navio na fila com fundeio real confirmado e ETA alinhado com AIS satelital.
+   * **MÉDIA ($75\% - 89\%$ de precisão esperada):** Navio com previsão de atracação em cascata dentro da primeira semana de atendimento, sem divergências críticas de maré ou calado.
+   * **BAIXA ($< 75\%$ de precisão esperada):** Escalas distantes no horizonte de planejamento ($> 14$ dias) sujeitas a redistribuição na esteira ou navios com divergência severa de ETA entre SISPORT e AIS ($|\Delta \text{ETA}| > 24\,\text{h}$).
+
+2. **Acurácia Média Ponderada da Central ($\text{Acc}_{\text{modelo}}$):**
+   $$\text{Acc}_{\text{modelo}} = \frac{1}{N} \sum_{i=1}^N \text{Precisão Estimada}(i)$$
+   *Exemplo Operacional:* **$96{,}2\%$ ALTA**, com widget interativo no rodapé que expande a contagem de navios por faixa de confiança (`15 Alta`, `3 Média`, `1 Baixa`) ao passar o mouse.
+
+---
+
+### 3.12. Alocação Dinâmica Multi-Berço (Berço 101 vs. Cais Interno 201–204)
+
+O sistema suporta a segregação de tráfego entre diferentes infraestruturas de atracação do complexo portuário:
+
+* **Berço 101 (Cais Comercial Principal):** Extensão de $210\,\text{m}$, calado de até $10{,}00\,\text{m}$ ao ZH, dedicado aos granéis sólidos de importação/exportação e carga viva internacional. Opera sob regra estrita de fila contínua exclusiva (apenas 1 navio atracado por vez).
+* **Berço 201 a 204 (Cais Interno, Cabotagem e Apoio Marítimo):** Embarcações de apoio offshore, cabotagem e serviços portuários (ex: navio *ATLANTIS* no Berço 202).
+* **Concorrência Operacional Respeitada:** O motor identifica navios alocados nos berços internos e permite sua operação simultânea sem bloquear ou interferir na esteira de atracação do Berço 101 comercial.
+* **Fitas de Ocupação no Gantt:** O cabeçalho exibe fitas horizontais independentes para `BERÇO 101 • CAIS COMERCIAL` e `BERÇO 202 • CAIS INTERNO`, eliminando qualquer ambiguidade visual.
+
+---
+
+### 3.13. Algoritmo de Resolução de IMO (Jaro-Winkler)
 
 Para evitar dependência de APIs lentas ou indisponíveis, a associação do nome de uma embarcação ao seu IMO oficial (indexado em base local de 16.200+ registros) utiliza uma estratégia em 3 níveis:
 
@@ -363,7 +402,7 @@ Para evitar dependência de APIs lentas ou indisponíveis, a associação do nom
 
 ---
 
-### 3.12. Preservação de Estados Operacionais e Fundeio Real
+### 3.14. Preservação de Estados Operacionais e Fundeio Real
 
 Durante as sincronizações contínuas com a programação oficial da CDSS (`portoss.sp.gov.br`), o sistema aplica regras estritas de não-regressão de dados:
 
@@ -378,38 +417,80 @@ Durante as sincronizações contínuas com a programação oficial da CDSS (`por
 
 ## 4. Inovações e Ergonomia Visual do Gantt CCO (v2.0)
 
-O diagrama de Gantt foi construído para visualização ininterrupta em centros de controle operacional de videowall:
+O diagrama de Gantt foi construído para visualização ininterrupta em centros de controle operacional de videowall, incorporando avanços de ergonomia visual, controle de densidade e prontuário flutuante:
+
+### 4.1. Modos de Densidade Operacional (Essencial vs. Detalhado)
+
+Para atender tanto à visualização rápida e limpa em videowalls quanto à inspeção analítica profunda pelos operadores de turno, o sistema implementa um seletor de densidade no cabeçalho do Y-axis ([GanttChart.tsx](file:///d:/DEV/CDSS-Lineup/client/src/components/GanttChart.tsx)):
+
+* **Modo Essencial (Padrão Ativo):**
+  - **Altura Fixa Preservada (`h-24` = 96px):** Alinhamento horizontal perfeito com as barras e marcos da linha do tempo.
+  - **Organização em 2 Linhas Arejadas:**
+    - **Linha 1 (Superior):** Indicador de status em ponto pulsante (esmeralda para operando ou neutro para fila) + Nome completo do navio sem cortes (capacidade de até 23 caracteres, acomodando nomes extensos como `LIZZY CONFIDENCE` e `ADVENTURE HERO` sem reticências) + Badge de Berço Oficial (`B-101`, `B-202`) + Carga, ícone de chuva (`🌧️`) e Volume formatado (`7.000 t`).
+    - **Linha 2 (Inferior):** Barra de progresso horizontal slim única com gradiente esmeralda e percentual integrado (`⚡ 38,9%` ou `⚡ 88,9%`), sem qualquer duplicação na raia lateral + Data/hora prevista de início para a fila (`Início: 18/10 20:00`) + Pílulas compactas de alerta crítico (`🌊 Maré Restrita`, `⚓ Praticagem`, `⚠️ AIS Adiantado/Atraso`, `🎯 Confiabilidade`) + Data de desatracação prevista (`Saída: 18/10 18:00`) ou duração estimada de cais (`Cais: ~18.8h`).
+* **Modo Detalhado (Toggle Global):**
+  - Acionado pelo botão `[ ☷ Detalhado ]` no topo da coluna lateral e memorizado no navegador via `localStorage` (`cdss_gantt_modo_exibicao`).
+  - Renderiza na raia as especificações náuticas completas: LOA (m), Calados de Entrada e Saída (m), registro IMO, categoria da Praticagem e badges expandidos de telemetria.
+
+### 4.2. Ficha Técnica Flutuante (Prontuário Náutico no Hover)
+
+Ao posicionar o cursor sobre qualquer cartão de navio na coluna lateral, o sistema projeta um popover inteligente à direita sobre a área de histórico decorrido, atuando como prontuário náutico integral:
+* **Dimensões Náuticas:** Comprimento Total (LOA) e Porte Bruto (DWT em toneladas).
+* **Berço Oficial & Agência:** Berço designado (`B-101` ou `B-202`) e agência marítima responsável.
+* **Calados Operacionais:** Entrada e Saída desacoplados com análise de lâmina d'água.
+* **Manobra da Praticagem:** Categoria (`PTA1` a `PTA6`), status da ordem de manobra e confiança.
+* **Recomendação de Maré:** Preamar astronômica recomendada pela DHN e altura requerida.
+* **Status do Transponder AIS:** Data e hora exata da última sincronização com a telemetria satelital.
+
+### 4.3. Escala Temporal Reativa Selecionável (7D, 14D e 28D)
+
+O seletor no cabeçalho superior do CCO permite redimensionar dinamicamente o horizonte temporal do gráfico:
+* **7 Dias (7D):** Foco tático de curto prazo (2 dias no passado + 5 dias no futuro).
+* **14 Dias (14D):** Planejamento quinzenal de berço (3 dias no passado + 11 dias no futuro).
+* **28 Dias (28D):** Visão estratégica mensal completa (3 dias no passado + 25 dias no futuro).
+* **Micro-Labels Inteligentes:** A largura dos blocos e textos na linha do tempo adapta-se automaticamente à largura da tela via `ResizeObserver`, suprimindo labels em blocos estreitos para evitar sobreposição de texto.
+
+### 4.4. Cabeçalho Empilhado Fixo (Sticky Stack) & Linha Dourada "AGORA"
 
 1. **Cabeçalho Empilhado Fixo (*Sticky Stack*):**
    * **Linha 1 (`top-0`, 24px):** Linha de referência presente (**`AGORA ▼`**) com agulha vertical luminosa contínua que desce por toda a grade.
-   * **Linha 2 (`top-24px`, 44px):** Régua dos dias do mês com destaque cromático no dia de hoje e nos finais de semana.
-   * **Linha 3 (`top-68px`, 50px):** Sparkline vetorial SVG da curva harmônica de maré da DHN (azul ciano preamar `▲`, âmbar baixamar `▼`).
-   * **Linha 4 (`top-118px`, 48px):** Fita contínua de ocupação do Berço 101 comercial.
+   * **Linha 2 (`top-24px`, 44px):** Régua dos dias do mês com destaque cromático no dia de hoje e nos finais de semana, contendo o seletor `[ 👁️ Essencial | ☷ Detalhado ]`.
+   * **Linha 3 (`top-68px`, 50px):** Sparkline vetorial SVG da curva harmônica contínua de maré da DHN (azul ciano preamar `▲`, âmbar baixamar `▼`).
+   * **Linha 4 (`top-118px`, 48px):** Fitas contínuas de ocupação dos berços comerciais e de apoio.
 2. **Linha Guia "AGORA" em Amarelo Dourado (*Golden Radar*):**
-   * **Destaque Cromático Semântico:** O cursor temporal, o badge `AGORA ▼` e a linha vertical utilizam tom **Amarelo Dourado** (`amber-400` / `#FBBF24`) com halo de iluminação (`shadow-[0_0_12px_rgba(251,191,36,0.9)]`).
-   * **Zero Conflito Visual:** Elimina a confusão com as barras vermelhas de navios fundeados e com alertas de emergência, proporcionando leitura imediata e alto contraste sobre qualquer bloco do gráfico.
-   * **Descritivo da Legenda:** A indicação `— Linha "Agora" (DD/MM HH:MM BRT)` exibe o horário oficial local de Brasília (BRT) sincronizado com UTC invariante.
-3. **Barra Inferior de KPIs Operacionais em Tempo Real:**
-   * **Total no Line-up:** Contagem de escalas ativas na fila (`16 navios`).
-   * **Operando no Berço:** Destaque do navio fisicamente atracado no Cais Comercial (`1 ativo`).
-   * **Fundeio / Espera:** Contagem das embarcações aguardando atendimento (`15 aguardando`).
-   * **Carga Total Programada:** Somatório de todas as cargas ativas em toneladas métricas ($252.050\,\text{t}$).
-   * **Ocupação do Berço (Janela 30D):** Barra de progresso da saturação física (100% = 720h nominais completas) com tooltip de auditoria.
-   * **Fila Total e Demanda:** Horas totais acumuladas de operação ($2.280{,}5\,\text{h}$), percentual de sobrecarga ($317{,}0\%$) e dias estimados de cais ($\approx 95$ dias).
-4. **Menu Unificado de Sincronização CDSS no Header:**
-   * Acesso simplificado pelo botão suspenso `Sincronizar CDSS ∨`:
-     * Disparo manual do SISPORT Oficial.
-     * Sincronização integrada 3 em 1 (SISPORT + Praticagem + AIS).
-     * Parametrização em tempo real da frequência do worker de segundo plano (5, 10, 15, 30 ou 60 minutos, ou pausado).
-     * Telemetria da última execução e contagem regressiva para a próxima varredura.
-5. **Semântica de Cores Oficial CDSS:**
-   * 🟢 **Verde:** Operando fisicamente no berço comercial único.
-   * 🔵 **Azul:** Previsão de berço futura encadeada pelo motor.
-   * 🔴 **Vermelho:** Fundeado na barra em espera confirmada.
-   * 🟠 **Laranja:** Espera prevista (aguardando chegada do navio).
-   * ⚪ **Cinza:** Livre prática sanitária concedida.
-   * 🟡 **Amarelo Dourado:** Cursor temporal e Linha "AGORA" em tempo real.
-6. **Dark & Light Mode:** Paleta noturna profunda de alta densidade (`#070d18`) ou modo diurno de alto contraste (`#f8fafc`), com alternância instantânea.
+   * Cursor temporal, badge `AGORA ▼` e linha vertical luminosa em tom **Amarelo Dourado** (`amber-400` / `#FBBF24`), garantindo alto contraste e zero interferência com alertas vermelhos de navios fundeados.
+   * Carimbo temporal com horário oficial de Brasília (BRT) sincronizado com UTC invariante.
+
+### 4.5. Fitas Contínuas de Ocupação Multi-Berço
+
+Visualização da esteira de berço separada por cais:
+* **`BERÇO 101 • CAIS COMERCIAL` (Fila Contínua):** Mostra o navio atualmente atracado e a sequência imediata das próximas escalas na fila única.
+* **`BERÇO 202 • CAIS INTERNO` (Apoio / Simultâneo):** Exibe a operação concomitante de embarcações de apoio ou cabotagem sem poluir a esteira do Cais Comercial.
+
+### 4.6. Barra Inferior de KPIs Operacionais & Widget de Acurácia
+
+No rodapé da página, os indicadores operacionais atualizam-se em tempo real:
+* **Total no Line-up:** Escalas ativas cadastradas (`19 navios`).
+* **Operando no Berço:** Embarcações atracadas em atividade (`2 ativos` entre Cais Comercial e Interno).
+* **Fundeio / Espera:** Navios aguardando atendimento na barra (`17 aguardando`).
+* **Carga Total Programada:** Volume consolidado da carteira ($209.294{,}4\,\text{t}$).
+* **Acurácia do Modelo Preditivo:** Percentual de confiabilidade média do encadeamento (**$96{,}2\%$ ALTA**), com popover no hover detalhando a distribuição de confiança.
+* **Ocupação do Berço na Janela:** Medição precisa da janela ativa (**$80\%$** na janela 7D), com total de horas da fila ($1.536{,}1\,\text{h}$) e término estimado do atendimento ($\approx 64$ dias).
+
+### 4.7. Menu Unificado de Sincronização CDSS no Header
+* Disparo manual do SISPORT Oficial.
+* Sincronização integrada 3 em 1 (SISPORT + Praticagem + AIS).
+* Parametrização em tempo de execução da frequência do worker (5, 10, 15, 30 ou 60 minutos, ou pausado).
+* Telemetria da última varredura e contagem regressiva para o próximo ciclo.
+
+### 4.8. Semântica de Cores Oficial CDSS & Dark/Light Mode
+* 🟢 **Verde:** Operando fisicamente no berço.
+* 🔵 **Azul:** Previsão de berço futura calculada pelo motor.
+* 🔴 **Vermelho:** Fundeado na barra em espera confirmada.
+* 🟠 **Laranja:** Espera prevista (aguardando chegada do navio).
+* ⚪ **Cinza:** Livre prática sanitária concedida.
+* 🟡 **Amarelo Dourado:** Cursor temporal e Linha "AGORA" em tempo real.
+* **Alternância Dark / Light:** Paleta profunda de alta densidade (`#070d18`) ou modo diurno de alto contraste (`#f8fafc`).
 
 ---
 
@@ -499,13 +580,13 @@ VITE_CARTO_API_KEY=sua_chave_carto_aqui
 
 ---
 
-## 9. Instruções de Execução Local
+## 9. Instruções de Execução Local & Testes
 
 ### Pré-requisitos
 * **Node.js** v20+ ou v22 LTS instalado.
 * Instância do **PostgreSQL** ativa (ou string `DATABASE_URL` configurada).
 
-### 1. Instalação
+### 1. Instalação de Dependências
 ```bash
 npm install
 ```
@@ -517,9 +598,23 @@ npm run dev
 * **Frontend Web:** [`http://localhost:5173`](http://localhost:5173)
 * **Backend API:** [`http://localhost:3000/api/lineup`](http://localhost:3000/api/lineup)
 
-### 3. Build de Produção
+### 3. Execução dos Testes Automatizados (Vitest)
+A plataforma possui cobertura abrangente de testes automatizados para validar a integridade matemática do motor:
 ```bash
+npm test
+```
+* **Cobertura da Suite:** 39 testes unitários e de integração cobrindo motor determinístico, cálculo de run-rate, estimativa de chuva, engenharia de UKC/marés, alocação multi-berço e auditoria de divergência de ETA.
+
+### 4. Build e Execução de Produção
+```bash
+# Compilação completa (servidor e cliente)
 npm run build
+
+# Ou compilação granular
+npm run build:server
+npm run build:client
+
+# Inicialização do serviço em produção
 npm start
 ```
 
