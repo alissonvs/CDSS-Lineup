@@ -177,10 +177,12 @@ export function parseSisportHtml(html: string): SisportParsedRow[] {
           }
         }
 
-        // Ignora navios que já desatracaram completamente ou concluíram 100% da operação
+        // Ignora navios que já desatracaram completamente do porto.
+        // Navios com situação OPERANDO ou ATRACADO continuam ocupando o berço fisicamente
+        // mesmo quando já atingiram 100% de movimentação de carga.
         if (
           situacao === 'DESATRACADO' ||
-          (progressoPct !== null && progressoPct >= 100)
+          (situacao !== 'OPERANDO' && situacao !== 'ATRACADO' && progressoPct !== null && progressoPct >= 100)
         ) {
           continue;
         }
@@ -310,6 +312,14 @@ export async function sincronizarComSisportOficial(): Promise<{
     }
   }
 
+  // Carrega resumo de navios atracados na Praticagem para identificação oficial de berços (ex: CINT / Berço 202 vs CAIS / Berço 101)
+  let praticagemAtracados: any[] = [];
+  try {
+    praticagemAtracados = (await sql`SELECT navio, berco FROM praticagem_resumo_porto WHERE tipo = 'ATRACADOS'`) as any[];
+  } catch (errP) {
+    console.warn('[SisportSync] Aviso ao consultar praticagem_resumo_porto:', errP);
+  }
+
   const idsProcessados = new Set<number>();
   const novosNavios: string[] = [];
   let ordemFila = 1;
@@ -413,21 +423,46 @@ export async function sincronizarComSisportOficial(): Promise<{
       existing.longitude !== undefined &&
       !(existing.latitude === 0 && existing.longitude === 0);
 
+    // Identificação de berço oficial da Praticagem (ex: CINT / Berço 202 vs CAIS / Berço 101)
+    let bercoPraticagem: string | null = null;
+    const nomeNormItem = normalizarNomeNavio(item.navio);
+    const itemPrat = praticagemAtracados.find(p => p.navio && (
+      normalizarNomeNavio(p.navio) === nomeNormItem ||
+      normalizarNomeNavio(p.navio).includes(nomeNormItem) ||
+      nomeNormItem.includes(normalizarNomeNavio(p.navio))
+    ));
+    if (itemPrat?.berco) {
+      const bUpper = itemPrat.berco.toUpperCase();
+      if (bUpper.includes('CINT') || bUpper.includes('202')) bercoPraticagem = '202';
+      else if (bUpper.includes('201')) bercoPraticagem = '201';
+      else if (bUpper.includes('203')) bercoPraticagem = '203';
+      else if (bUpper.includes('204')) bercoPraticagem = '204';
+      else if (bUpper.includes('CAIS') || bUpper.includes('101')) bercoPraticagem = '101';
+    }
+
     if (temCoordenadasValidasNoBanco) {
       // Mantém a posição real exata transmitida pelo transponder AIS ou cadastrada previamente
       latitude = existing.latitude;
       longitude = existing.longitude;
     } else if (statusCor === 'VERDE') {
-      // Navios atracados sem coordenadas prévias: distribui ao longo dos berços de São Sebastião (CDSS)
-      const bercoCoords = [
-        { lat: -23.8114, lon: -45.3974 }, // Berço 101 Sul
-        { lat: -23.8109, lon: -45.3968 }, // Berço 101 Norte / 201
-        { lat: -23.8105, lon: -45.3971 }  // Berço 202
-      ];
-      const coordEscolhida = bercoCoords[operandoCount % bercoCoords.length];
-      latitude = coordEscolhida.lat;
-      longitude = coordEscolhida.lon;
-      operandoCount++;
+      if (bercoPraticagem === '202') {
+        latitude = -23.8105;
+        longitude = -45.3971;
+      } else if (bercoPraticagem === '101') {
+        latitude = -23.8114;
+        longitude = -45.3974;
+      } else {
+        // Navios atracados sem coordenadas prévias: distribui ao longo dos berços de São Sebastião (CDSS)
+        const bercoCoords = [
+          { lat: -23.8114, lon: -45.3974 }, // Berço 101 Sul
+          { lat: -23.8109, lon: -45.3968 }, // Berço 101 Norte / 201
+          { lat: -23.8105, lon: -45.3971 }  // Berço 202
+        ];
+        const coordEscolhida = bercoCoords[operandoCount % bercoCoords.length];
+        latitude = coordEscolhida.lat;
+        longitude = coordEscolhida.lon;
+        operandoCount++;
+      }
     } else {
       // Navio novo sem coordenadas prévias: atribui ponto de fundeio inicial
       latitude = fundeiosCoords[i % fundeiosCoords.length].lat;
@@ -465,9 +500,9 @@ export async function sincronizarComSisportOficial(): Promise<{
       ? (existing?.fim_atracacao || null)
       : (existing?.fim_atracacao || null);
 
-    // Identificação inteligente do berço por telemetria e geofencing
-    let bercoFinal: string | null = null;
-    if (statusCor === 'VERDE' && latitude && longitude) {
+    // Identificação inteligente do berço por Praticagem, telemetria e geofencing
+    let bercoFinal: string | null = bercoPraticagem;
+    if (!bercoFinal && statusCor === 'VERDE' && latitude && longitude) {
       const bercoGeo = identificarBercoPorCoordenadas(latitude, longitude);
       if (bercoGeo) {
         bercoFinal = bercoGeo.berco;

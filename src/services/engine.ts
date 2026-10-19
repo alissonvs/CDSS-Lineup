@@ -527,7 +527,8 @@ async function executarCalculoMotorInterno(): Promise<{
   const rawNavios = (
     await sql<NavioLineup[]>`
       SELECT * FROM lineup_navios 
-      WHERE COALESCE(progresso_operacao, 0) < 100
+      WHERE (status_sisport != 'DESATRACADO' OR status_sisport IS NULL)
+        AND (status_cor = 'VERDE' OR COALESCE(progresso_operacao, 0) < 100)
       ORDER BY COALESCE(ordem_sisport, ordem_fila) ASC, id ASC
     `
   ) as NavioLineup[];
