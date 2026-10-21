@@ -1368,10 +1368,12 @@ export async function registrarOuAtualizarSnapshotsPrevisao(navios: NavioLineup[
       const duracaoPrevHoras = Math.round(((fimPrev.getTime() - iniPrev.getTime()) / 3600000) * 10) / 10;
       const isVerde = n.status_cor === 'VERDE';
 
-      // Busca snapshot em andamento para este navio
+      // Busca snapshot em andamento para este navio (por lineup_id específico da escala, com fallback por IMO)
+      const navioId = n.id ?? null;
       const existentes = await sql<SnapshotHistoricoPrevisao[]>`
         SELECT * FROM lineup_historico_previsoes
-        WHERE imo = ${n.imo} AND status_fechamento = 'EM_ANDAMENTO'
+        WHERE (lineup_id = ${navioId} OR (lineup_id IS NULL AND imo = ${n.imo}))
+          AND status_fechamento = 'EM_ANDAMENTO'
         ORDER BY id DESC LIMIT 1
       `;
 

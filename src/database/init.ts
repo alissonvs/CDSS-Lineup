@@ -25,7 +25,7 @@ export async function initializeDatabase(maxRetries = 5, retryDelayMs = 2500): P
   await sql`
     CREATE TABLE IF NOT EXISTS lineup_navios (
         id SERIAL PRIMARY KEY,
-        imo TEXT UNIQUE NOT NULL,
+        imo TEXT NOT NULL,
         nome_navio TEXT NOT NULL,
         tipo_navio TEXT DEFAULT 'Graneleiro',
         mercadoria TEXT NOT NULL,
@@ -238,6 +238,17 @@ export async function initializeDatabase(maxRetries = 5, retryDelayMs = 2500): P
 
   // Migração defensiva: garante a existência das colunas opcionais no PostgreSQL
   try {
+    // Desacoplamento de escala: remove restrição de unicidade em IMO para permitir múltiplas escalas do mesmo navio
+    await sql`ALTER TABLE lineup_navios DROP CONSTRAINT IF EXISTS lineup_navios_imo_key`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_lineup_navios_imo ON lineup_navios (imo)`;
+
+    // Normalização retroativa: remove sufixos sintéticos temporários (ex: 9553141_19 -> 9553141)
+    await sql`
+      UPDATE lineup_navios 
+      SET imo = regexp_replace(imo, '_[0-9]+$', '') 
+      WHERE imo ~ '_[0-9]+$';
+    `;
+
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS eta_ais TEXT`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS inicio_operacao TEXT`;
     await sql`ALTER TABLE lineup_navios ADD COLUMN IF NOT EXISTS sinal_antena TEXT`;

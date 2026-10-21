@@ -78,12 +78,6 @@ export async function createNavioHandler(req: Request, res: Response): Promise<v
       }
     }
 
-    // Garante unicidade do IMO no banco de dados
-    const existingImo = await sql`SELECT id FROM lineup_navios WHERE imo = ${imo}`;
-    if (existingImo.length > 0) {
-      imo = `${imo}_${Date.now().toString().slice(-4)}`;
-    }
-
     // Calcula a próxima ordem na fila se não informada
     let ordem = body.ordem_fila;
     if (ordem === undefined || ordem === null) {
@@ -170,16 +164,7 @@ export async function updateNavioHandler(req: Request, res: Response): Promise<v
     }
 
     if (imo !== existing.imo) {
-      // Verifica se outro registro já utiliza esse mesmo IMO para evitar violação de chave única
-      const conflito = await sql`SELECT id, nome_navio FROM lineup_navios WHERE imo = ${imo} AND id != ${id}`;
-
-      if (conflito.length > 0) {
-        res.status(400).json({
-          success: false,
-          error: `O número IMO "${imo}" já está cadastrado para a embarcação "${conflito[0].nome_navio}".`
-        });
-        return;
-      }
+      console.log(`[LineupController] Atualizando IMO da escala ${id} ("${existing.nome_navio}"): ${existing.imo} -> ${imo}`);
     }
 
     if (body.status_cor) {

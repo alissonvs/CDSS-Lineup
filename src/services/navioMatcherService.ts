@@ -261,13 +261,13 @@ export async function atualizarImosLineupComCatalogo(): Promise<AtualizacaoLineu
     const imoEncontrado = match.imo;
     const imoAtual = String(navio.imo || '').trim();
 
-    // Se o IMO já é idêntico ao do catálogo ou é uma escala recorrente intencional com sufixo (ex: 9553141_19)
-    if (imoAtual === imoEncontrado || imoAtual.startsWith(`${imoEncontrado}_`)) {
+    // Se o IMO já é idêntico ao do catálogo oficial
+    if (imoAtual === imoEncontrado) {
       stats.detalhes.push({
         id: navio.id,
         nomeNavio: navio.nome_navio,
         imoAnterior: imoAtual,
-        imoNovo: imoAtual,
+        imoNovo: imoEncontrado,
         nomeCatalogo: match.nomeCatalogo,
         metodo: match.metodo,
         score: match.score
@@ -275,21 +275,7 @@ export async function atualizarImosLineupComCatalogo(): Promise<AtualizacaoLineu
       continue;
     }
 
-    // Verifica se o novo IMO colide com outro registro na tabela lineup_navios
-    const conflito = await sql`
-      SELECT id, nome_navio 
-      FROM lineup_navios 
-      WHERE imo = ${imoEncontrado} AND id != ${navio.id}
-    `;
-
-    if (conflito.length > 0) {
-      console.warn(
-        `[NavioMatcher] ⚠️  Conflito de chave: IMO ${imoEncontrado} ("${match.nomeCatalogo}") já está em uso pelo navio id ${conflito[0].id} ("${conflito[0].nome_navio}"). Atualização ignorada para evitar violação de unicidade.`
-      );
-      continue;
-    }
-
-    // Executa a atualização segura no banco de dados
+    // Executa a atualização do IMO real no banco de dados (suporta múltiplas escalas do mesmo navio)
     await sql`
       UPDATE lineup_navios 
       SET 
@@ -298,9 +284,6 @@ export async function atualizarImosLineupComCatalogo(): Promise<AtualizacaoLineu
       WHERE id = ${navio.id}
     `;
 
-    // Atualiza rastreamento local
-    imosUtilizadosNaFila.delete(imoAtual);
-    imosUtilizadosNaFila.add(imoEncontrado);
     stats.totalAtualizados++;
 
     stats.detalhes.push({

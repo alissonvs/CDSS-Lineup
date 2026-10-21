@@ -217,51 +217,63 @@ function encontrarNavioExistente(
   nomeNavioSisport: string,
   imoPreCalculado: string | null,
   naviosDb: any[],
-  idsJaAtribuidos: Set<number>
+  idsJaAtribuidos: Set<number>,
+  previsaoSisportStr?: string
 ): any | undefined {
   const disponiveis = naviosDb.filter(n => !idsJaAtribuidos.has(n.id));
   const nomeNorm = normalizarNomeNavio(nomeNavioSisport);
   const nomeUpper = nomeNavioSisport.trim().toUpperCase();
 
-  // 1. Busca por IMO (se o IMO pré-calculado for numérico padrão de 6 a 8 dígitos)
-  if (imoPreCalculado && /^\d{6,8}$/.test(imoPreCalculado)) {
-    const porImo = disponiveis.find(n => n.imo && String(n.imo).trim() === imoPreCalculado);
-    if (porImo) return porImo;
+  // Candidatos disponíveis correspondentes ao mesmo navio
+  const candidatos = disponiveis.filter(n => {
+    // 1. Busca por IMO (se o IMO pré-calculado for numérico padrão de 6 a 8 dígitos)
+    if (imoPreCalculado && /^\d{6,8}$/.test(imoPreCalculado) && n.imo && String(n.imo).trim().replace(/_\d+$/, '') === imoPreCalculado) {
+      return true;
+    }
+    // 2. Busca por Nome Exato
+    if (n.nome_navio && n.nome_navio.trim().toUpperCase() === nomeUpper) {
+      return true;
+    }
+    // 3. Busca por Nome Normalizado (remove pontos, hífens, acentos e espaços duplicados)
+    if (n.nome_navio && normalizarNomeNavio(n.nome_navio) === nomeNorm) {
+      return true;
+    }
+    // 4. Busca por Similaridade Fonética/Jaro-Winkler de altíssima confiança (score >= 0.94 e comprimentos compatíveis)
+    if (n.nome_navio) {
+      const targetNorm = normalizarNomeNavio(n.nome_navio);
+      const lenRatio = Math.min(nomeNorm.length, targetNorm.length) / Math.max(nomeNorm.length, targetNorm.length);
+      if (lenRatio >= 0.8 && jaroWinklerSimilarity(nomeNorm, targetNorm) >= 0.94) {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  if (candidatos.length === 0) {
+    return undefined;
   }
 
-  // 2. Busca por Nome Exato
-  const porNomeExato = disponiveis.find(
-    n => n.nome_navio && n.nome_navio.trim().toUpperCase() === nomeUpper
-  );
-  if (porNomeExato) return porNomeExato;
+  // Se houver apenas 1 candidato disponível para este navio
+  if (candidatos.length === 1) {
+    return candidatos[0];
+  }
 
-  // 3. Busca por Nome Normalizado (remove pontos, hífens, acentos e espaços duplicados)
-  const porNomeNorm = disponiveis.find(
-    n => n.nome_navio && normalizarNomeNavio(n.nome_navio) === nomeNorm
-  );
-  if (porNomeNorm) return porNomeNorm;
+  // Se houver múltiplas escalas do mesmo navio, desempata pela proximidade da data de previsão (ETA)
+  if (previsaoSisportStr) {
+    const prevSisportIso = parseBrDate(previsaoSisportStr);
+    const prevTimestamp = new Date(prevSisportIso).getTime();
 
-  // 4. Busca por Similaridade Fonética/Jaro-Winkler de altíssima confiança (score >= 0.94 e comprimentos compatíveis)
-  let melhorScore = 0;
-  let melhorMatch: any = undefined;
-  for (const n of disponiveis) {
-    if (!n.nome_navio) continue;
-    const targetNorm = normalizarNomeNavio(n.nome_navio);
-    const lenRatio = Math.min(nomeNorm.length, targetNorm.length) / Math.max(nomeNorm.length, targetNorm.length);
-    if (lenRatio < 0.8) continue; // Evita falsos positivos como ATLANTIC ROSE vs ATLANTIS
-
-    const score = jaroWinklerSimilarity(nomeNorm, targetNorm);
-    if (score > melhorScore) {
-      melhorScore = score;
-      melhorMatch = n;
+    if (!isNaN(prevTimestamp)) {
+      candidatos.sort((a, b) => {
+        const timeA = a.eta_previsto ? new Date(a.eta_previsto).getTime() : 0;
+        const timeB = b.eta_previsto ? new Date(b.eta_previsto).getTime() : 0;
+        return Math.abs(timeA - prevTimestamp) - Math.abs(timeB - prevTimestamp);
+      });
+      return candidatos[0];
     }
   }
 
-  if (melhorMatch && melhorScore >= 0.94) {
-    return melhorMatch;
-  }
-
-  return undefined;
+  return candidatos[0];
 }
 
 /**
@@ -336,8 +348,6 @@ export async function sincronizarComSisportOficial(): Promise<{
     { lat: -23.7550, lon: -45.4600 }
   ];
 
-  const imosUsados = new Set<string>();
-
   for (let i = 0; i < parsedRows.length; i++) {
     const item = parsedRows[i];
     novosNavios.push(item.navio);
@@ -345,19 +355,16 @@ export async function sincronizarComSisportOficial(): Promise<{
     const fallbackCatalog = REGISTRO_NAVAL_CDSS[item.navio];
     const imoCatalogoOuFallback = catalogoImoMap.get(item.navio.trim().toUpperCase()) || fallbackCatalog?.imo || null;
 
-    // Localiza registro já existente no banco de dados via matching multicritério
-    const existing = encontrarNavioExistente(item.navio, imoCatalogoOuFallback, naviosDb, idsProcessados);
+    // Localiza registro já existente no banco de dados via matching multicritério (desempatando por data de previsão)
+    const existing = encontrarNavioExistente(item.navio, imoCatalogoOuFallback, naviosDb, idsProcessados, item.previsao);
 
     // IMO: Reutiliza o IMO já validado no banco (se numérico padrão), catálogo oficial ou determinístico
-    let imo = (existing?.imo && /^\d{6,8}$/.test(String(existing.imo).trim()))
+    const rawImo = (existing?.imo && /^\d{6,8}$/.test(String(existing.imo).trim()))
       ? String(existing.imo).trim()
       : (imoCatalogoOuFallback || (existing?.imo ? String(existing.imo).trim() : gerarImoDeterministico(item.navio)));
 
-    // Garantir unicidade de IMO no banco de dados
-    if (imosUsados.has(imo)) {
-      imo = `${imo}_${i + 1}`;
-    }
-    imosUsados.add(imo);
+    // Garante que o IMO seja numérico real sem sufixos legados
+    const imo = rawImo.replace(/_\d+$/, '');
 
     const isCargaViva =
       item.mercadoria.toLowerCase().includes('animais') ||
