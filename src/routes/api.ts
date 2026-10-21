@@ -35,6 +35,12 @@ const router = Router();
 router.get('/health', getHealthHandler);
 router.get('/livez', (_req, res) => { res.status(200).send('OK'); });
 router.get('/version', (_req, res) => { res.json({ name: 'pcs-lineup', version: APP_VERSION }); });
+router.get('/config', (_req, res) => {
+  res.json({
+    version: APP_VERSION,
+    cartoApiKey: (process.env.VITE_CARTO_API_KEY || process.env.CARTO_API_KEY || '').trim()
+  });
+});
 
 // Lineup e Navios
 router.get('/lineup', getLineupHandler);

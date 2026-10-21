@@ -40,13 +40,28 @@ app.use((req, _res, next) => {
 // Rotas da API
 app.use('/api', apiRoutes);
 
-// Servir frontend compilado em produção ou se client/dist existir
+// Servir frontend compilado em produção com injeção dinâmica de variáveis de ambiente
 const clientDistPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(clientDistPath)) {
-  app.use(express.static(clientDistPath));
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(clientDistPath, 'index.html'));
-  });
+  const indexHtmlPath = path.join(clientDistPath, 'index.html');
+
+  const renderIndexWithEnv = (_req: express.Request, res: express.Response) => {
+    try {
+      let html = fs.readFileSync(indexHtmlPath, 'utf-8');
+      const cartoKey = (process.env.VITE_CARTO_API_KEY || process.env.CARTO_API_KEY || '').trim();
+      const injection = `<script>window.__APP_CONFIG__ = Object.assign(window.__APP_CONFIG__ || {}, ${JSON.stringify({ CARTO_API_KEY: cartoKey })});</script>`;
+      html = html.replace('</head>', `${injection}</head>`);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
+    } catch {
+      res.sendFile(indexHtmlPath);
+    }
+  };
+
+  // Serve assets estáticos (sem index automático na raiz para permitir injeção dinâmica)
+  app.use(express.static(clientDistPath, { index: false }));
+  app.get('/', renderIndexWithEnv);
+  app.get('*', renderIndexWithEnv);
 } else {
   app.get('/', (_req, res) => {
     res.send(`

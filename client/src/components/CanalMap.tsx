@@ -11,7 +11,14 @@ interface CanalMapProps {
 
 type BasemapStyle = 'dark' | 'voyager' | 'positron' | 'satellite';
 
-const CARTO_KEY = (import.meta.env.VITE_CARTO_API_KEY || import.meta.env.CARTO_API_KEY || '') as string;
+const getCartoKey = (): string => {
+  if (typeof window !== 'undefined' && window.__APP_CONFIG__?.CARTO_API_KEY) {
+    return window.__APP_CONFIG__.CARTO_API_KEY;
+  }
+  return (import.meta.env.VITE_CARTO_API_KEY || import.meta.env.CARTO_API_KEY || '') as string;
+};
+
+const CARTO_KEY = getCartoKey();
 
 interface BasemapOption {
   id: BasemapStyle;
