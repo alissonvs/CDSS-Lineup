@@ -26,10 +26,13 @@ const HOST = process.env.HOST || '0.0.0.0';
 app.use(cors());
 app.use(express.json());
 
-// Logging simples de requisições
+// Logging simples de requisições (suprime polling de alta frequência para manter o console limpo)
 app.use((req, _res, next) => {
   if (req.path.startsWith('/api')) {
-    console.log(`[HTTP] ${req.method} ${req.path}`);
+    const isPolling = req.path === '/api/sisport/config' || req.path === '/api/health' || req.path === '/api/livez';
+    if (!isPolling) {
+      console.log(`[HTTP] ${req.method} ${req.path}`);
+    }
   }
   next();
 });

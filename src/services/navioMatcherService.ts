@@ -261,13 +261,13 @@ export async function atualizarImosLineupComCatalogo(): Promise<AtualizacaoLineu
     const imoEncontrado = match.imo;
     const imoAtual = String(navio.imo || '').trim();
 
-    // Se o IMO já é idêntico ao do catálogo, não precisa de update no banco
-    if (imoAtual === imoEncontrado) {
+    // Se o IMO já é idêntico ao do catálogo ou é uma escala recorrente intencional com sufixo (ex: 9553141_19)
+    if (imoAtual === imoEncontrado || imoAtual.startsWith(`${imoEncontrado}_`)) {
       stats.detalhes.push({
         id: navio.id,
         nomeNavio: navio.nome_navio,
         imoAnterior: imoAtual,
-        imoNovo: imoEncontrado,
+        imoNovo: imoAtual,
         nomeCatalogo: match.nomeCatalogo,
         metodo: match.metodo,
         score: match.score
