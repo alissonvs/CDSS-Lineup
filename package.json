@@ -9,7 +9,7 @@
     "dev:server": "tsx watch src/server.ts",
     "dev:client": "npm --prefix client run dev",
     "dev": "concurrently -k -p \"[{name}]\" -n \"SERVER,CLIENT\" -c \"cyan.bold,magenta.bold\" \"npm run dev:server\" \"npm run dev:client\"",
-    "test": "vitest run",
+    "test": "npx vitest run",
     "build:server": "tsc -p tsconfig.json",
     "build:client": "npm --prefix client run build",
     "build": "npm run build:server && npm run build:client",

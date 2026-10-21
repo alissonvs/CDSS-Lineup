@@ -1,7 +1,24 @@
 import { getDatabase } from './connection.js';
 import { importarNavios } from '../scripts/importNavios.js';
 
-export async function initializeDatabase(): Promise<void> {
+export async function initializeDatabase(maxRetries = 5, retryDelayMs = 2500): Promise<void> {
+  let attempt = 0;
+  while (true) {
+    try {
+      attempt++;
+      const sqlTest = getDatabase();
+      await sqlTest`SELECT 1`;
+      break;
+    } catch (err: any) {
+      if (attempt >= maxRetries) {
+        console.error(`[Database] Falha crítica de conexão com o PostgreSQL após ${attempt} tentativas:`, err.message);
+        throw err;
+      }
+      console.warn(`[Database] Aguardando PostgreSQL inicializar (tentativa ${attempt}/${maxRetries})... Nova tentativa em ${retryDelayMs}ms.`);
+      await new Promise(r => setTimeout(r, retryDelayMs));
+    }
+  }
+
   const sql = getDatabase();
 
   // 1. Criar Tabelas no PostgreSQL

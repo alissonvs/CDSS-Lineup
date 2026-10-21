@@ -14,7 +14,7 @@ COPY package*.json ./
 COPY client/package*.json ./client/
 
 # Instala todas as dependências (raiz e cliente)
-RUN npm ci && npm --prefix client ci
+RUN npm ci --ignore-scripts && npm --prefix client ci
 
 # Copia configurações e código-fonte
 COPY tsconfig.json ./
@@ -54,7 +54,7 @@ EXPOSE 3000
 
 # Probe de saúde nativo (usado pelo Docker e Dokploy)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1
+  CMD wget -q --spider http://127.0.0.1:3000/api/health || exit 1
 
 # Comando de inicialização do servidor
 CMD ["node", "dist/server.js"]
